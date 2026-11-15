@@ -115,7 +115,7 @@ actor MCPConnection {
 		let id = nextID()
 		let reply = try await post([
 			"jsonrpc": "2.0", "id": id, "method": "initialize",
-			"params": ["protocolVersion": protocolVersion, "capabilities": [String: Any](), "clientInfo": ["name": "Mailflare", "version": "1"]],
+			"params": ["protocolVersion": protocolVersion, "capabilities": [String: Any](), "clientInfo": ["name": "Solstand Mail", "version": "1"]],
 		], id: id)
 		if let error = reply?["error"] as? [String: Any] {
 			throw AIError(message: (error["message"] as? String) ?? "The MCP server refused to start a session.")

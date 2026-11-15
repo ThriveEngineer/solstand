@@ -12,6 +12,18 @@ private final class CoreEvents: CoreListener {
 	}
 }
 
+/// The folder popup in the sidebar: create a folder, or rename/delete an existing one.
+struct FolderEditorRequest: Identifiable {
+	enum Kind {
+		case create(parentID: String?)
+		case rename(Mailbox)
+		case delete(Mailbox)
+	}
+	let id = UUID()
+	var accountID: String
+	var kind: Kind
+}
+
 @MainActor
 @Observable
 final class MailStore {
@@ -46,10 +58,7 @@ final class MailStore {
 	var inboxUnread = 0
 	/// The address mailbox the sidebar is scoped to; nil means all inboxes.
 	var scopeID: String? = UserDefaults.standard.string(forKey: "scopeInbox")
-	var brandName = "Mailflare"
-	/// A licensed server's branding follows the app across accounts; otherwise the account's own.
-	var displayBrandName: String { license.brandName ?? brandName }
-	let license = LicenseManager()
+	var displayBrandName = "Solstand Mail"
 	let ai = AISettings()
 	/// Remote MCP servers the assistant can use, with their secrets in the Keychain.
 	let mcp = MCPStore()
@@ -76,7 +85,7 @@ final class MailStore {
 	let contacts = ContactProfiles()
 	/// The rewrite prompts offered in the reply box: built in, and the user's own.
 	let aiPrompts = AIPromptLibrary()
-	@ObservationIgnored private(set) var avatars = AvatarCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent("mailflare-avatars", isDirectory: true))
+	@ObservationIgnored private(set) var avatars = AvatarCache(directory: FileManager.default.temporaryDirectory.appendingPathComponent("solstand-mail-avatars", isDirectory: true))
 
 	var sidebar: SidebarItem = .allInboxes
 	var messages: [MessageSummary] = []
@@ -118,7 +127,7 @@ final class MailStore {
 	/// The view open in the create/edit popup.
 	var inboxViewEditor: InboxView?
 	/// The folder popup in view: a new folder, or a rename or delete of one.
-	var folderRequest: FolderRequest?
+	var folderRequest: FolderEditorRequest?
 	@ObservationIgnored private var folderSupportCache: [String: FolderSupport] = [:]
 	var activeView: InboxView? {
 		guard let id = activeViewID else { return nil }
@@ -266,6 +275,7 @@ final class MailStore {
 	}()
 
 	@ObservationIgnored private var detailTask: Task<Void, Never>?
+	@ObservationIgnored private var reminderTask: Task<Void, Never>?
 	@ObservationIgnored private var pollTask: Task<Void, Never>?
 	/// Held while polling so App Nap does not stretch the poll interval of a hidden window.
 	@ObservationIgnored private var pollActivity: NSObjectProtocol?
@@ -280,10 +290,10 @@ final class MailStore {
 		notifier.open = { [weak self] account, message in self?.openMessage(accountID: account, messageID: message) }
 		do {
 			var base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-				.appendingPathComponent("Mailflare", isDirectory: true)
+				.appendingPathComponent("Solstand Mail", isDirectory: true)
 			#if DEBUG
 			// Debug builds can point at a scratch directory so tests never touch a real account's cache.
-			if let scratch = ProcessInfo.processInfo.environment["MAILFLARE_DATA_DIR"] { base = URL(fileURLWithPath: scratch, isDirectory: true) }
+			if let scratch = ProcessInfo.processInfo.environment["SOLSTAND_MAIL_DATA_DIR"] { base = URL(fileURLWithPath: scratch, isDirectory: true) }
 			#endif
 			avatars = AvatarCache(directory: base.appendingPathComponent("avatars", isDirectory: true))
 			quickReplies = QuickReplies(file: base.appendingPathComponent("quick-replies.json"))
@@ -299,7 +309,7 @@ final class MailStore {
 	private var accountID: String { account?.id ?? "" }
 
 	static var dataDirectoryDescription: String {
-		(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Mailflare").path ?? "Application Support/Mailflare")
+		(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("Solstand Mail").path ?? "Application Support/Solstand Mail")
 			.replacingOccurrences(of: NSHomeDirectory(), with: "~")
 	}
 
@@ -308,16 +318,6 @@ final class MailStore {
 	func restore() async {
 		guard phase == .connecting else { return }
 		guard let core else { phase = .signedOut; return }
-		#if DEBUG
-		// Debug builds only: sign in from launch variables so screenshots need no typing.
-		let env = ProcessInfo.processInfo.environment
-		if let key = env["MAILFLARE_DEV_KEY"], let email = env["MAILFLARE_DEV_EMAIL"] {
-			phase = .connecting
-			do { activate(try await core.signIn(email: email, appPassword: key, serverUrl: env["MAILFLARE_DEV_SERVER"])) }
-			catch { phase = .signedOut; banner = describe(error) }
-			return
-		}
-		#endif
 		let saved = (try? core.accounts()) ?? []
 		if let first = saved.first(where: { $0.id == UserDefaults.standard.string(forKey: Self.lastAccountKey) }) ?? saved.first {
 			if KeychainCredentialStore().load(accountId: first.id) == nil {
@@ -329,40 +329,6 @@ final class MailStore {
 			return
 		}
 		phase = .signedOut
-	}
-
-	/// Tries the account password first (device key + MFA), then falls back to an app password.
-	func signIn(server: String, email: String, password: String, deviceName: String) async throws -> SignInOutcome {
-		guard let core else { throw CoreError.Storage(message: "The mail database is not available.") }
-		let url = server.trimmingCharacters(in: .whitespaces).isEmpty ? nil : Self.normalize(server)
-		do {
-			switch try await core.signInWithPassword(email: email, password: password, serverUrl: url, deviceName: deviceName) {
-			case .signedIn(let account):
-				activate(account)
-				return .signedIn
-			case .mfaRequired(let challenge, let serverURL):
-				return .needsCode(challenge: challenge, serverURL: serverURL)
-			}
-		} catch let error as CoreError {
-			switch error {
-			case .Network:
-				// Say which address was tried: with no server given, the core guesses from the email's domain.
-				if url == nil {
-					let domain = email.split(separator: "@").last.map(String.init) ?? "your email's domain"
-					throw CoreError.Network(message: "Could not reach a Mailflare server at \(domain). Enter your server address (for example mail.\(domain)).")
-				}
-				throw CoreError.Network(message: "Could not connect to \(server.trimmingCharacters(in: .whitespaces)). Check the address and your connection.")
-			case .Auth, .Discovery:
-				do {
-					activate(try await core.signIn(email: email, appPassword: password, serverUrl: url))
-					return .signedIn
-				} catch let second as CoreError {
-					if case .Auth = second { throw CoreError.Auth(message: "Invalid credentials. Use your account password or an app password.") }
-					throw second
-				}
-			default: throw error
-			}
-		}
 	}
 
 	/// IMAP accounts: the core checks the login on the incoming and outgoing servers, then stores it.
@@ -387,24 +353,6 @@ final class MailStore {
 		activate(try await core.signInOauth(
 			email: email, client: client, authorization: authorization, redirectUrl: callback.absoluteString, config: config))
 		return true
-	}
-
-	func completeMFA(email: String, challenge: String, code: String, serverURL: String, deviceName: String) async throws {
-		guard let core else { return }
-		activate(try await core.completeMfa(email: email, challengeToken: challenge, code: code, serverUrl: serverURL, deviceName: deviceName))
-	}
-
-	// MARK: Folders and labels
-
-	struct FolderRequest: Identifiable {
-		enum Kind {
-			case create(parentID: String?)
-			case rename(Mailbox)
-			case delete(Mailbox)
-		}
-		let id = UUID()
-		var accountID: String
-		var kind: Kind
 	}
 
 	/// What the account allows for folders (and whether to call them labels), nil when the core can't say.
@@ -533,17 +481,9 @@ final class MailStore {
 		if accountID == account?.id { refreshMailboxes() }
 	}
 
-	private static func normalize(_ server: String) -> String {
-		var s = server.trimmingCharacters(in: .whitespacesAndNewlines)
-		if !s.contains("://") {
-			let local = s.hasPrefix("localhost") || s.hasPrefix("127.0.0.1")
-			s = (local ? "http://" : "https://") + s
-		}
-		return s
-	}
-
 	private func activate(_ account: Account) {
 		self.account = account
+		scheduleReminderExpiry()
 		accountList = (try? core?.accounts()) ?? [account]
 		showAddAccount = false
 		activeViewID = nil
@@ -572,8 +512,6 @@ final class MailStore {
 			try? await Task.sleep(for: .milliseconds(200))
 			guard let self, self.phase == .ready else { return }
 			WebViewWarmup.run()
-			self.loadBrand()
-			self.refreshLicenses()
 			for a in self.accountList { self.loadAvatars(for: a); self.loadNames(for: a) }
 			await self.notifier.prepare()
 		}
@@ -601,7 +539,9 @@ final class MailStore {
 		profiles.forget(target.id)
 		quickReplies.forget(account: target.id)
 		accountList = (try? core?.accounts()) ?? accountList.filter { $0.id != target.id }
-		license.retain(accountIDs: accountList.map(\.id))
+		reminders = reminders.filter { ViewMessageID.split($0.key).account != target.id }
+		UserDefaults.standard.set(reminders.mapValues(\.timeIntervalSince1970), forKey: "reminders")
+		scheduleReminderExpiry()
 	}
 
 	func signOut(notice: String? = nil) {
@@ -612,8 +552,8 @@ final class MailStore {
 		chat.reset()
 		// VIPs and reminders belong to the account that was signed in.
 		vips = []; reminders = [:]
-		scopeID = nil; brandName = "Mailflare"
-		license.retain(accountIDs: (try? core?.accounts().map(\.id)) ?? [])
+		reminderTask?.cancel(); reminderTask = nil
+		scopeID = nil
 		UserDefaults.standard.removeObject(forKey: "scopeInbox")
 		UserDefaults.standard.removeObject(forKey: "vips")
 		UserDefaults.standard.removeObject(forKey: "reminders")
@@ -1025,10 +965,9 @@ final class MailStore {
 	static let defaultFavorites = ["inbox", "vips", "flagged", "remind", "drafts", "sent"]
 	private static let systemKeys = ["inbox", "vips", "flagged", "remind", "drafts", "sent", "junk", "trash", "archive"]
 
-	/// VIPs and reminders exist only on this Mac: neither the Mailflare server nor the core has them
-	/// (no VIP list, no snooze). They stay hidden until a mail service supports them.
-	static let supportsVIPs = false
-	static let supportsReminders = false
+	/// VIPs and snoozes are local client features and work with every connected provider.
+	static let supportsVIPs = true
+	static let supportsReminders = true
 	var supportsVIPs: Bool { Self.supportsVIPs }
 	var supportsReminders: Bool { Self.supportsReminders }
 
@@ -1149,7 +1088,7 @@ final class MailStore {
 
 	// MARK: Inbox scope (one address, or all of them)
 
-	/// Address mailboxes: top-level mailboxes holding an inbox of their own. Mailflare has one per
+	/// Address mailboxes: top-level mailboxes holding an inbox of their own. Providers may expose one per
 	/// address; Gmail and other single-inbox providers have none, so nothing says "All" for them.
 	static func addressMailboxes(in list: [Mailbox]) -> [Mailbox] {
 		let owners = Set(list.filter { $0.role == "inbox" }.compactMap(\.parentId))
@@ -1185,7 +1124,9 @@ final class MailStore {
 	/// Whether a message belongs to the chosen inbox (always true when scoped to all).
 	private func inScope(_ m: MessageSummary) -> Bool {
 		guard let scope = scopeInbox?.id else { return true }
-		return mailbox(m.mailboxId)?.parentId == scope
+		let parts = ViewMessageID.split(m.id)
+		let mailboxID = parts.account.map { ViewMessageID.make(account: $0, message: m.mailboxId) } ?? m.mailboxId
+		return mailbox(mailboxID)?.parentId == scope
 	}
 
 	/// A system folder within the chosen inbox, or across all inboxes.
@@ -1284,44 +1225,6 @@ final class MailStore {
 		}
 	}
 
-	// MARK: Brand
-
-	func loadBrand() {
-		guard let account else { return }
-		let key = "brand.\(account.id)"
-		brandName = UserDefaults.standard.string(forKey: key) ?? "Mailflare"
-		let id = account.id
-		Task {
-			guard let json = await Self.fetchBranding(of: account), self.account?.id == id else { return }
-			guard let name = json["appName"] as? String else { return }
-			brandName = name.isEmpty ? "Mailflare" : name
-			UserDefaults.standard.set(brandName, forKey: key)
-		}
-	}
-
-	/// A server with an active Pro or Team license activates the app for as long as the account is
-	/// signed in, so every saved account is asked, not only the one in view.
-	func refreshLicenses() {
-		license.retain(accountIDs: accountList.map(\.id))
-		for account in accountList {
-			Task {
-				guard let json = await Self.fetchBranding(of: account),
-					  let licensed = json["canCustomizeBranding"] as? Bool else { return }
-				license.setServerLicensed(licensed, accountID: account.id, brandName: json["appName"] as? String)
-			}
-		}
-	}
-
-	private nonisolated static func fetchBranding(of account: Account) async -> [String: Any]? {
-		var parts = URLComponents(string: account.serverUrl.contains("://") ? account.serverUrl : "https://\(account.serverUrl)")
-		guard parts?.host != nil, ["http", "https"].contains(parts?.scheme ?? "") else { return nil }
-		parts?.path = "/api/branding"; parts?.query = nil; parts?.fragment = nil
-		guard let url = parts?.url,
-			  let (data, response) = try? await URLSession.shared.data(from: url),
-			  (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-		return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-	}
-
 	static var appVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0" }
 
 	/// The address sections the sidebar lists: the chosen inbox only, or all of them.
@@ -1397,7 +1300,7 @@ final class MailStore {
 		}
 		switch sidebar {
 		case .mailbox(let id):
-			guard let box = mailbox(id) else { return "Mailflare" }
+			guard let box = mailbox(id) else { return "Solstand Mail" }
 			let parent = box.parentId.flatMap(mailbox)?.name ?? ""
 			return parent.isEmpty ? box.name : "\(box.name) — \(parent)"
 		case .allInboxes: return scopedTitle("Inbox", all: "Inboxes")
@@ -1410,7 +1313,7 @@ final class MailStore {
 		case .allTrash: return scopedTitle("Trash", all: "Trash")
 		case .allArchive: return scopedTitle("Archive", all: "Archive")
 		case .smartToday: return "Today"
-		case .customTab(let id): return customTab(id)?.name ?? "Mailflare"
+		case .customTab(let id): return customTab(id)?.name ?? "Solstand Mail"
 		}
 	}
 
@@ -1453,7 +1356,8 @@ final class MailStore {
 	}
 
 	private func matchesSidebar(_ m: MessageSummary) -> Bool {
-		switch sidebar {
+		if sidebar != .remindMe, role(of: m) == "inbox", isSnoozed(m.id) { return false }
+		return switch sidebar {
 		case .allInboxes: role(of: m) == "inbox" && inScope(m)
 		case .allDrafts: role(of: m) == "drafts" && inScope(m)
 		case .allSent: role(of: m) == "sent" && inScope(m)
@@ -1463,7 +1367,7 @@ final class MailStore {
 		case .flagged: m.flagged && inScope(m)
 		case .mailbox(let id): m.mailboxId == id
 		case .vips: vips.contains(m.fromEmail.lowercased()) && inScope(m)
-		case .remindMe: reminders[m.id] != nil && inScope(m)
+		case .remindMe: isSnoozed(m.id) && inScope(m)
 		case .smartToday: role(of: m) == "inbox" && CustomTab.today.matches(m) && inScope(m)
 		case .customTab(let id): role(of: m) == "inbox" && inScope(m) && (customTab(id)?.matches(m) ?? false)
 		}
@@ -1564,7 +1468,14 @@ final class MailStore {
 					list.sort { $0.receivedAt > $1.receivedAt }
 				}
 			} else if sidebar == .remindMe {
-				list = reminders.keys.compactMap { try? core.messageSummary(accountId: id, messageId: $0) }.filter(inScope).sorted { $0.receivedAt > $1.receivedAt }
+				list = reminders.keys.compactMap { key in
+					let parts = ViewMessageID.split(key)
+					let owner = parts.account ?? id
+					guard let summary = try? core.messageSummary(accountId: owner, messageId: parts.message) else { return nil }
+					var tagged = summary
+					tagged.id = key
+					return tagged
+				}.filter(inScope).sorted { $0.receivedAt > $1.receivedAt }
 			} else if unreadOnly, let folder {
 				// Unread mail is asked of the store (and, once, of the server), not found by scanning the
 				// newest rows: the unread count counts mail older than anything stored here.
@@ -1572,7 +1483,7 @@ final class MailStore {
 				fetchUnreadIfNeeded([(id, folder)])
 			} else if let folder, !unreadOnly {
 				let page = try fetch(id, folder, limit: UInt32(pageLimit))
-				list = page.list
+				list = page.list.filter(matchesSidebar)
 				count = page.count
 			} else {
 				// Derived or filtered views scan a wide local window of the right folder.
@@ -2166,10 +2077,39 @@ final class MailStore {
 	}
 
 	func remind(_ id: String, at date: Date?) {
-		reminders[id] = date
-		if date == nil { reminders.removeValue(forKey: id) }
+		let owner = owner(of: id)
+		let key = ViewMessageID.make(account: owner.account, message: owner.message)
+		reminders[key] = date
+		if date == nil { reminders.removeValue(forKey: key) }
 		UserDefaults.standard.set(reminders.mapValues(\.timeIntervalSince1970), forKey: "reminders")
-		if sidebar == .remindMe { reload() }
+		scheduleReminderExpiry()
+		reload()
+	}
+
+	func isReminded(_ id: String) -> Bool { isSnoozed(id) }
+
+	private func isSnoozed(_ id: String) -> Bool {
+		let owner = owner(of: id)
+		return reminders[ViewMessageID.make(account: owner.account, message: owner.message)] != nil
+	}
+
+	/// When a local snooze expires, remove it from the snoozed list and let it reappear in its inbox.
+	private func scheduleReminderExpiry() {
+		reminderTask?.cancel()
+		let pending = reminders.filter { $0.value > .now }
+		if pending.count != reminders.count {
+			reminders = pending
+			UserDefaults.standard.set(reminders.mapValues(\.timeIntervalSince1970), forKey: "reminders")
+		}
+		guard let next = reminders.values.min() else { reminderTask = nil; return }
+		reminderTask = Task { [weak self] in
+			try? await Task.sleep(for: .seconds(max(0.1, next.timeIntervalSinceNow)))
+			guard !Task.isCancelled, let self else { return }
+			self.reminders = self.reminders.filter { $0.value > .now }
+			UserDefaults.standard.set(self.reminders.mapValues(\.timeIntervalSince1970), forKey: "reminders")
+			self.scheduleReminderExpiry()
+			self.reload()
+		}
 	}
 
 	// MARK: Compose
@@ -2334,7 +2274,7 @@ final class MailStore {
 	}
 
 	/// A dropdown drawn by the window's root view, above every pane (including web views), with its
-	/// bottom edge on top of `anchor`, a frame in the "mailflareRoot" coordinate space.
+	/// bottom edge on top of `anchor`, a frame in the "solstandRoot" coordinate space.
 	struct OverlayMenu {
 		var anchor: CGRect
 		var content: AnyView

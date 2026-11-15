@@ -1,13 +1,8 @@
 import Foundation
 import Observation
 
-/// The name and description the user gave a contact, kept on this Mac.
-///
-/// Mailflare's contact endpoints (`/api/contacts`) answer to a browser session only, a device key is
-/// refused, and they have no description field; JMAP has no contacts here either. So nothing can be
-/// written to the server yet, and every edit lives in this store. The picture goes through
-/// `AvatarCache.setLocal`, keyed by `AvatarCache.contactKey`. Clearing a field restores the sender's
-/// own name.
+/// Names and notes assigned to senders, stored locally on this Mac. Local avatars are managed by
+/// `AvatarCache`, and clearing a name restores the sender's original address-book display name.
 @MainActor
 @Observable
 final class ContactProfiles {

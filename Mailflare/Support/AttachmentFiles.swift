@@ -75,7 +75,7 @@ enum AttachmentFiles {
 	}
 
 	private static func scratchDirectory() -> URL {
-		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mailflare-pasted/\(UUID().uuidString)", isDirectory: true)
+		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("solstand-mail-pasted/\(UUID().uuidString)", isDirectory: true)
 		try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 		return dir
 	}

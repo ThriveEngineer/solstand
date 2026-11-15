@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// The palette shared with PiCode: two flat greys in the dark appearance (a base and one step
-/// above it), the system's own whites in the light one. Every colour resolves per appearance
-/// through `NSColor(name:)`, so views carry no `colorScheme` checks.
+/// A quiet, neutral palette with one soft indigo accent. Colors resolve per appearance through
+/// `NSColor(name:)`, so views carry no `colorScheme` checks.
 enum AppTheme {
+	static let accent = Color(nsColor: NSColor(rgb: 0x5B61D6))
 	/// The base the content sits on: #181818 dark.
 	static let background = adaptive(dark: 0x181818, light: NSColor(white: 1, alpha: 1))
 	/// One step above the base, for cards laid on it.

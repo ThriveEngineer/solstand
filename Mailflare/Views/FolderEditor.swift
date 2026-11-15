@@ -3,7 +3,7 @@ import MailflareCore
 
 /// The popup for a folder (a label on Gmail): name a new one, rename one, or confirm deleting one.
 struct FolderEditor: View {
-	let request: MailStore.FolderRequest
+	let request: FolderEditorRequest
 
 	@Environment(MailStore.self) private var store
 	@Environment(\.dismiss) private var dismiss

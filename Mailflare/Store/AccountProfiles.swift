@@ -5,12 +5,12 @@ import Observation
 /// What the Accounts settings page shows and edits per account: display name, signature.
 ///
 /// The server's values are read over JMAP (`Identity/get`) and written with `Identity/set`. A server
-/// that refuses the write (Mailflare's identities are read-only today) keeps the value on this Mac
+/// that refuses the write (a provider that refuses identity edits) keeps the value on this Mac
 /// instead, and the page says so. Local values win over the server's, and clearing one restores it.
 @MainActor
 @Observable
 final class AccountProfiles {
-	static let defaultSignature = "Sent from Mailflare Desktop"
+	static let defaultSignature = "Sent from Solstand Mail"
 
 	private struct Entry: Codable {
 		var name: String?
@@ -55,7 +55,7 @@ final class AccountProfiles {
 	/// The signature as a composer block: a gap, then the lines.
 	func signatureHTML(_ accountID: String) -> String {
 		let lines = signature(accountID).components(separatedBy: .newlines).map { Self.escape($0) }.joined(separator: "<br>")
-		return "<div><br></div><div class=\"mailflare-signature\">-- <br>\(lines)</div>"
+		return "<div><br></div><div class=\"solstand-signature\">-- <br>\(lines)</div>"
 	}
 
 	private static func escape(_ text: String) -> String {

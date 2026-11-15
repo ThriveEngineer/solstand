@@ -240,9 +240,9 @@ final class AISettings {
 	}
 }
 
-/// API keys in the Keychain, apart from account secrets and the license key.
+/// API keys in the Keychain, apart from account secrets and the account credentials.
 enum AIKeychain {
-	private static let service = "xyz.hieunguyen.Mailflare.ai"
+	private static let service = "com.solstand.mail.ai"
 
 	private static func query(_ account: String) -> [String: Any] {
 		[kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: account]

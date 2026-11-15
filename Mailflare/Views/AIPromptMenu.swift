@@ -29,7 +29,7 @@ struct AIPromptMenu: View {
 			icon: .sparkles, help: isRunning ? "Rewriting…" : "Rewrite with AI",
 			isActive: isOpen, isEnabled: !isRunning, iconSize: iconSize, isLoading: isRunning
 		) { withAnimation(.snappy(duration: 0.2)) { isOpen.toggle() } }
-		.onGeometryChange(for: CGRect.self) { $0.frame(in: .named("mailflareRoot")) } action: { anchor = $0; if isOpen { present() } }
+		.onGeometryChange(for: CGRect.self) { $0.frame(in: .named("solstandRoot")) } action: { anchor = $0; if isOpen { present() } }
 		// The list is drawn by the window's root view, so nothing can cover it.
 		.onChange(of: isOpen) { _, open in if open { present() } else { store.overlayMenu = nil } }
 		.onDisappear { store.overlayMenu = nil }

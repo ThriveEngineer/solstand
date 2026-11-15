@@ -84,7 +84,7 @@ private struct MCPServerEditor: View {
 					SettingsRow {
 						Text("Name").font(Typography.body)
 						Spacer(minLength: 12)
-						TextField("Paymug", text: $server.name)
+						TextField("Provider name", text: $server.name)
 							.textFieldStyle(.plain).multilineTextAlignment(.trailing).font(Typography.body)
 					}
 					SettingsDivider()

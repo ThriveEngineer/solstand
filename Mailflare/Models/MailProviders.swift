@@ -28,16 +28,8 @@ struct ServerEndpoint: Hashable {
 	}
 }
 
-enum MailProtocol: String, CaseIterable, Identifiable, Hashable {
-	case jmap = "JMAP"
-	case imap = "IMAP"
-	var id: String { rawValue }
-}
-
 /// What the sign-in form needs for a provider.
 enum ProviderKind: Hashable {
-	/// Mailflare: found over JMAP; the password is the account password or an app password.
-	case mailflare
 	/// IMAP/SMTP with known servers, filled in by default and open to review.
 	case imap(incoming: ServerEndpoint, outgoing: ServerEndpoint)
 	/// Every field is entered by hand.
@@ -84,7 +76,6 @@ struct MailProvider: Identifiable, Hashable {
 }
 
 enum MailProviders {
-	static let mailflare = MailProvider(id: "mailflare", name: "Mailflare", color: 0xF4511E, kind: .mailflare, username: .email, domains: [])
 	static let custom = MailProvider(id: "custom", name: "Other mail server", color: 0x757575, kind: .custom, username: .email, domains: [])
 
 	/// Common providers with their published IMAP and SMTP settings.

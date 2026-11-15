@@ -51,10 +51,10 @@ final class MailNotifier: NSObject, UNUserNotificationCenterDelegate {
 
 	private var canPost: Bool { isAllowed }
 
-	/// Whether macOS lets Mailflare post notifications (System Settings → Notifications).
+	/// Whether macOS lets Solstand Mail post notifications (System Settings → Notifications).
 	var isAllowed: Bool { authorization == .authorized || authorization == .provisional }
 
-	/// Mailflare's page in System Settings → Notifications. An app can ask for permission only once;
+	/// Solstand Mail's page in System Settings → Notifications. An app can ask for permission only once;
 	/// after that, turning it on or off there is the user's to do.
 	static func openSystemSettings() {
 		let id = Bundle.main.bundleIdentifier ?? ""

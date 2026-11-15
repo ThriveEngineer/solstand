@@ -529,7 +529,7 @@ enum MCPCredentialParser {
 		text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"'`<>,;")))
 	}
 
-	/// "https://mcp.paymug.com/v1" → "Paymug".
+	/// "https://mcp.example.com/v1" → "Example".
 	static func nameFromHost(_ url: String) -> String {
 		guard var host = URL(string: url)?.host?.lowercased() else { return "MCP Server" }
 		for prefix in ["www.", "mcp.", "api.", "app."] where host.hasPrefix(prefix) { host.removeFirst(prefix.count) }

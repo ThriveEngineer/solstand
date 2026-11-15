@@ -1,7 +1,7 @@
 import Foundation
 import MailflareCore
 
-/// The mail tools the assistant can call, mirroring the Mailflare web assistant's. They act on the
+/// The mail tools the optional assistant can call. They act on the
 /// account in view. Nothing here sends mail: `review_draft_send` opens the composer so the user does.
 @MainActor
 struct AIMailTools {

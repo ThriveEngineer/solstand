@@ -16,7 +16,7 @@ final class ComposeTemplates {
 
 	private static var file: URL {
 		FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-			.appendingPathComponent("Mailflare/templates.json")
+			.appendingPathComponent("Solstand Mail/templates.json")
 	}
 
 	init() {

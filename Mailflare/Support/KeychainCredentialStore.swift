@@ -5,7 +5,7 @@ import Security
 /// Account secrets (app passwords or device keys) live in the Keychain, keyed by the core's
 /// account id. The core asks for them per request and never writes them to its database.
 final class KeychainCredentialStore: CredentialStore {
-	private let service = "xyz.hieunguyen.Mailflare.account"
+	private let service = "com.solstand.mail.account"
 
 	private func query(_ accountId: String) -> [String: Any] {
 		[kSecClass as String: kSecClassGenericPassword,

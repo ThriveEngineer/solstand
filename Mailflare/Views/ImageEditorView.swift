@@ -2,6 +2,7 @@ import SwiftUI
 import Vision
 import NaturalLanguage
 import MailflareCore
+import Observation
 
 /// An image being edited in the full-window editor, and what to do with the result.
 struct ImageEditSession: Identifiable {
@@ -225,10 +226,11 @@ final class ImageEditorModel {
 		let request = VNRecognizeTextRequest()
 		request.recognitionLevel = .accurate
 		request.usesLanguageCorrection = false
-		try? VNImageRequestHandler(cgImage: image).perform([request])
+		try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
 		let w = CGFloat(image.width), h = CGFloat(image.height)
 		var out: [SensitiveBox] = []
-		let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType([.link, .phoneNumber, .address]).rawValue)
+		let checking: NSTextCheckingResult.CheckingType = [.link, .phoneNumber, .address]
+		let detector = try? NSDataDetector(types: checking.rawValue)
 		let digits = try? NSRegularExpression(pattern: #"\d[\d .-]{6,}\d"#)
 
 		for observation in request.results ?? [] {
@@ -920,7 +922,7 @@ struct ImageEditorView: View {
 		guard let model else { return }
 		commitPendingIfNeeded(model, 1)
 		guard let data = model.render() else { close(); return }
-		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mailflare-edits/\(UUID().uuidString)", isDirectory: true)
+		let dir = FileManager.default.temporaryDirectory.appendingPathComponent("solstand-mail-edits/\(UUID().uuidString)", isDirectory: true)
 		let base = (session.name as NSString).deletingPathExtension
 		let url = dir.appendingPathComponent(base + ".png")
 		do {

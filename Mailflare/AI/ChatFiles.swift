@@ -28,7 +28,7 @@ enum ChatFiles {
 
 	private static var root: URL {
 		let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-		return base.appendingPathComponent("Mailflare/ChatFiles", isDirectory: true)
+		return base.appendingPathComponent("Solstand Mail/ChatFiles", isDirectory: true)
 	}
 
 	private static func folder(_ id: String) -> URL { root.appendingPathComponent(id, isDirectory: true) }
@@ -163,9 +163,11 @@ enum ChatFiles {
 				} else { cell.append(c) }
 			} else if c == "\"" {
 				quoted = true
-			} else if c == delimiter {
-				row.append(cell); cell = ""
-			} else if c == "\n" || c == "\r\n" || c == "\r" {
+			} else if c == "\n" || c == "\r" {
+				// Treat both LF and CR (optionally followed by LF) as a newline.
+				if c == "\r", let n = next() {
+					if n != "\n" { pending = n }
+				}
 				row.append(cell); cell = ""
 				if !(row.count == 1 && row[0].isEmpty) { records.append(row) }
 				row = []

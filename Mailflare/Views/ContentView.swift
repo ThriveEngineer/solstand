@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import MailflareCore
 
 struct RootView: View {
@@ -21,6 +22,7 @@ struct RootView: View {
 		// Hidden only while the saved account is being looked for, so neither view flashes up first.
 		.background(WindowVisibility(isVisible: store.phase != .connecting))
 		.background(MovableByBackground(isOn: store.phase == .signedOut))
+		.tint(AppTheme.accent)
 	}
 }
 
@@ -150,7 +152,7 @@ struct ContentView: View {
 		.onChange(of: store.sidebar) { _, _ in drawerOpen = false }
 		.onChange(of: store.settingsPage) { _, _ in drawerOpen = false }
 		.ignoresSafeArea()
-		.coordinateSpace(name: "mailflareRoot")
+		.coordinateSpace(name: "solstandRoot")
 		// Dropdowns that must sit above every pane, web views included.
 		.overlay(alignment: .topLeading) { if let menu = store.overlayMenu { OverlayMenuHost(menu: menu) } }
 		// An empty toolbar keeps the unified titlebar band, which centres the traffic lights on
@@ -338,7 +340,7 @@ struct ContentView: View {
 
 	// MARK: Titlebar
 
-	/// macOS has notifications off for Mailflare.
+	/// macOS has notifications off for Solstand Mail.
 	private var blockedBySystem: Bool { store.notifier.authorization == .denied }
 
 	private var titlebarLeading: some View {
@@ -348,7 +350,7 @@ struct ContentView: View {
 		let toggle = TitlebarIconButton(icon: .sidebar, help: "Toggle sidebar (⌃⌘S)") { toggleSidebar() }
 			.keyboardShortcut("s", modifiers: [.control, .command])
 		let warning = TitlebarIconButton(icon: .notificationOff, help: "Notification is off", tint: .orange) {
-			// macOS blocks it: only System Settings can lift that. Otherwise it is Mailflare's own switch.
+			// macOS blocks it: only System Settings can lift that. Otherwise it is Solstand Mail's own switch.
 			if blockedBySystem { MailNotifier.openSystemSettings() } else { store.settingsPage = .notifications }
 		}
 		let warns = blockedBySystem || !notificationsOn
@@ -643,10 +645,13 @@ struct ContentView: View {
 			}
 			if store.supportsReminders {
 				Divider()
-				Button("Remind Me Tomorrow") {
+				Button("Snooze Until Tomorrow") {
 					if let message { store.remind(message.id, at: Calendar.current.date(byAdding: .day, value: 1, to: .now)) }
 				}
-				if let message, store.reminders[message.id] != nil {
+				Button("Snooze for a Week") {
+					if let message { store.remind(message.id, at: Calendar.current.date(byAdding: .day, value: 7, to: .now)) }
+				}
+				if let message, store.isReminded(message.id) {
 					Button("Clear Reminder") { store.remind(message.id, at: nil) }
 				}
 			}

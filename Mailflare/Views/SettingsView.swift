@@ -23,8 +23,6 @@ struct SettingsView: View {
 					case .accounts: AccountSettings()
 					case .ai: AISettingsPage()
 					case .mcp: MCPSettingsPage()
-					case .license: LicenseSettings()
-					case .support: SupportSettings()
 					case .about: AboutSettings()
 					}
 				}
@@ -310,7 +308,6 @@ struct WideButton: View {
 // MARK: Pages
 
 private struct GeneralSettings: View {
-	@AppStorage(ReadingSettings.autoCheckUpdatesKey) private var autoCheck = true
 	@AppStorage(AppAppearance.key) private var appearance = AppAppearance.system.rawValue
 	@AppStorage(MessageAppearance.adaptKey) private var adaptColors = true
 	@AppStorage(ReadingSettings.markReadDelayKey) private var markReadDelay = 0
@@ -321,16 +318,11 @@ private struct GeneralSettings: View {
 	@State private var launchAtLogin = LaunchAtLogin.isEnabled
 
 	var body: some View {
-		SettingsGroup(title: "Startup & Updates") {
-			SettingsToggle(title: "Open Mailflare at login", isOn: Binding(
+		SettingsGroup(title: "Startup") {
+			SettingsToggle(title: "Open Solstand Mail at login", isOn: Binding(
 				get: { launchAtLogin },
 				set: { launchAtLogin = $0; if !LaunchAtLogin.set($0) { launchAtLogin = LaunchAtLogin.isEnabled } }
 			))
-			SettingsDivider()
-			SettingsToggle(
-				title: "Check for updates automatically",
-				detail: "New versions come from the Mailflare releases on GitHub.",
-				isOn: $autoCheck)
 		}
 		SettingsGroup(title: "Appearance") {
 			SettingsPicker(
@@ -380,7 +372,7 @@ private struct NotificationSettingsPage: View {
 	@AppStorage(NotificationSettings.soundKey) private var sound = true
 	@AppStorage(NotificationSettings.badgeKey) private var badge = true
 
-	/// On means macOS allows Mailflare's notifications and the app has not muted them itself.
+	/// On means macOS allows Solstand Mail's notifications and the app has not muted them itself.
 	private var allowSwitch: Binding<Bool> {
 		Binding(
 			get: { enabled && store.notifier.isAllowed },
@@ -397,18 +389,18 @@ private struct NotificationSettingsPage: View {
 
 	private var allowDetail: String {
 		switch store.notifier.authorization {
-		case .denied: "Turned off for Mailflare in System Settings. Turn it on there, then come back."
-		case .notDetermined: "Mailflare will ask macOS for permission."
-		default: "Alert on new mail in any account's inbox. Turning this off stops Mailflare's alerts; macOS's own setting stays as it is."
+		case .denied: "Turned off for Solstand Mail in System Settings. Turn it on there, then come back."
+		case .notDetermined: "Solstand Mail will ask macOS for permission."
+		default: "Alert on new mail in any account's inbox. Turning this off stops Solstand Mail's alerts; macOS's own setting stays as it is."
 		}
 	}
 
 	var body: some View {
-		SettingsGroup(title: "Notifications", footer: "Mailflare checks every account for new mail about once a minute while it is open. Each account can be muted on its page under Accounts.") {
+		SettingsGroup(title: "Notifications", footer: "Solstand Mail checks every account for new mail about once a minute while it is open. Each account can be muted on its page under Accounts.") {
 			SettingsToggle(title: "Allow notifications", detail: allowDetail, isOn: allowSwitch)
 			SettingsDivider()
 			SettingsRow {
-				Text("Banner style and sounds for Mailflare are also managed by macOS.")
+				Text("Banner style and sounds for Solstand Mail are also managed by macOS.")
 					.font(Typography.meta).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 				Spacer(minLength: 8)
 				Button("Open System Settings") { MailNotifier.openSystemSettings() }
@@ -425,7 +417,7 @@ private struct NotificationSettingsPage: View {
 		}
 		.onChange(of: badge) { _, _ in store.updateBadge() }
 		.task { await store.notifier.refreshAuthorization() }
-		// The user may have changed it in System Settings while Mailflare was in the background.
+		// The user may have changed it in System Settings while the app was in the background.
 		.onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
 			Task { await store.notifier.refreshAuthorization() }
 		}
@@ -1007,110 +999,13 @@ private struct ProviderEditor: View {
 	}
 }
 
-private struct LicenseSettings: View {
-	@Environment(MailStore.self) private var store
-	@Environment(\.openURL) private var openURL
-	@State private var keyText = ""
-
-	private var license: LicenseManager { store.license }
-
-	var body: some View {
-		SettingsGroup(title: "Mailflare Pro", footer: footer) {
-			SettingsRow {
-				Text("Plan").font(Typography.body)
-				Spacer()
-				Text(license.isPro ? "Pro" : "Free").font(Typography.body).foregroundStyle(.secondary)
-			}
-			if license.serverLicensed {
-				SettingsDivider()
-				SettingsRow {
-					Text("Activated by").font(Typography.body)
-					Spacer(minLength: 16)
-					Text(store.account.map { "\($0.serverUrl)" } ?? "Your server")
-						.font(Typography.meta).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
-				}
-			}
-			if let masked = license.maskedKey {
-				SettingsDivider()
-				SettingsRow {
-					Text("License key").font(Typography.body)
-					Spacer(minLength: 16)
-					Text(masked).font(.system(.footnote, design: .monospaced)).foregroundStyle(.secondary)
-				}
-			}
-		}
-		if license.licenseKey != nil {
-			if license.busy {
-				ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-			} else {
-				WideButton(title: "Deactivate This Mac") { Task { await license.deactivate() } }
-			}
-		} else {
-			SettingsGroup(title: "Activate a license key") {
-				SettingsRow {
-					TextField("License key", text: $keyText)
-						.textFieldStyle(.plain)
-						.font(Typography.body)
-						.onSubmit(activate)
-					Button("Activate", action: activate)
-						.buttonStyle(.pillProminent)
-						.disabled(keyText.trimmingCharacters(in: .whitespaces).isEmpty || license.busy)
-				}
-			}
-			if license.busy { ProgressView().controlSize(.small).frame(maxWidth: .infinity) }
-			if !license.isPro {
-				WideButton(title: "Buy Mailflare Pro", prominent: true) { openURL(LicenseManager.buyURL) }
-			}
-		}
-		if let message = license.message {
-			Text(message).font(Typography.meta).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-		}
-	}
-
-	private var footer: String {
-		license.serverLicensed
-			? "Your Mailflare server has an active license, so this app is activated while you are signed in to it."
-			: "Signing in to a Mailflare account whose server has a Pro license activates the app automatically. Otherwise enter the key from your purchase email."
-	}
-
-	private func activate() {
-		let key = keyText
-		Task { await license.activate(key: key); if license.keyActive { keyText = "" } }
-	}
-}
-
-private struct SupportSettings: View {
-	private static let issuesURL = URL(string: "https://github.com/hieunc229/mailflare-macos/issues")!
-
-	var body: some View {
-		SettingsGroup(title: "Need help?", footer: "Include your macOS version, the Mailflare version (see Version) and, for a bug, the steps that cause it. Please leave out passwords, API keys and private mail.") {
-			VStack(alignment: .leading, spacing: 6) {
-				Text("Found a bug, or want a feature?").font(Typography.bodySemibold)
-				Text("Create an issue on GitHub and describe what happened or what you would like. Every report is read there.")
-					.font(Typography.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-			}
-			.padding(.vertical, 12)
-			SettingsDivider()
-			SettingsRow {
-				Text("Issues").font(Typography.body)
-				Spacer(minLength: 16)
-				Text("github.com/hieunc229/mailflare-macos/issues").font(Typography.meta).foregroundStyle(.secondary)
-					.lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-			}
-		}
-		WideButton(title: "Create a GitHub Issue", icon: .support, prominent: true) { NSWorkspace.shared.open(Self.issuesURL) }
-	}
-}
-
 private struct AboutSettings: View {
-	@Environment(AppUpdater.self) private var updater
-
 	var body: some View {
-		SettingsGroup(title: "Mailflare") {
+		SettingsGroup(title: "Solstand Mail") {
 			SettingsRow {
 				Text("Version").font(Typography.body)
 				Spacer()
-				Text(AppUpdater.currentVersion).font(Typography.body).foregroundStyle(.secondary)
+				Text(AppMetadata.currentVersion).font(Typography.body).foregroundStyle(.secondary)
 			}
 			SettingsDivider()
 			SettingsRow {
@@ -1119,23 +1014,6 @@ private struct AboutSettings: View {
 				Text(MailStore.dataDirectoryDescription).font(Typography.meta).foregroundStyle(.secondary)
 					.lineLimit(1).truncationMode(.middle).textSelection(.enabled)
 			}
-		}
-		if let release = updater.available {
-			switch updater.phase {
-			case .idle:
-				WideButton(title: "Update to \(release.version) and Restart", prominent: true) { Task { await updater.install() } }
-			case .downloading, .installing:
-				HStack(spacing: 8) {
-					ProgressView().controlSize(.small)
-					Text(updater.phase == .downloading ? "Downloading \(release.version)…" : "Installing…").font(Typography.body)
-				}
-				.frame(maxWidth: .infinity).padding(.vertical, 7)
-			case .failed(let message):
-				Text(message).font(Typography.meta).foregroundStyle(.orange)
-				WideButton(title: "Try Again") { Task { await updater.install() } }
-			}
-		} else {
-			WideButton(title: "Check for Updates") { Task { await updater.check() } }
 		}
 	}
 }

@@ -3,7 +3,6 @@ import MailflareCore
 
 struct SidebarView: View {
 	@Environment(MailStore.self) private var store
-	@Environment(AppUpdater.self) private var updater
 	@State private var switcherOpen = false
 
 	var body: some View {
@@ -90,7 +89,7 @@ struct SidebarView: View {
 		let activeView = store.activeView
 		let inbox = activeView != nil ? nil : (store.currentInbox ?? (multipleInboxes ? nil : store.inboxAddresses.first))
 		let title = activeView?.name ?? inbox.map { store.label($0) }
-			?? (store.account.map(store.switcherName) ?? "Mailflare")
+			?? (store.account.map(store.switcherName) ?? "Solstand Mail")
 		return Button {
 			withAnimation(.snappy(duration: 0.22)) { switcherOpen.toggle() }
 		} label: {
@@ -552,24 +551,7 @@ private func actionRow(_ icon: AppIcon, _ title: String, action: @escaping () ->
 			if let note = store.connectionNote {
 				Text(note).font(.footnote).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
 			}
-			if let release = updater.available {
-				updateNotice(release)
-			}
-			if !store.license.isPro {
-				Button { store.settingsPage = .license } label: {
-					HStack(spacing: 8) {
-						HIcon(.crown, size: 15)
-						Text("Upgrade to Pro").font(.system(size: 13, weight: .medium))
-					}
-					.frame(maxWidth: .infinity)
-					.padding(.vertical, 9)
-					.background(AppTheme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-					.overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.outline, lineWidth: 1))
-					.contentShape(Rectangle())
-				}
-				.buttonStyle(.plain)
-				.padding(.bottom, 4)
-			}
+
 			// Inside Settings the menu above is the way around, so this entry is only for the mail view.
 			if store.settingsPage == nil {
 				Button { store.settingsPage = .general } label: {
@@ -589,14 +571,6 @@ private func actionRow(_ icon: AppIcon, _ title: String, action: @escaping () ->
 			HStack(spacing: 6) {
 				Text("\(store.displayBrandName) v\(MailStore.appVersion)").font(Typography.meta.weight(.medium)).foregroundStyle(.tertiary).lineLimit(1)
 				Spacer(minLength: 0)
-				if store.license.isPro {
-					Text("PRO")
-						.font(.system(size: 10, weight: .bold)).tracking(0.6)
-						.foregroundStyle(.secondary)
-						.padding(.horizontal, 6).padding(.vertical, 2)
-						.background(AppTheme.elevated, in: Capsule())
-						.overlay(Capsule().stroke(AppTheme.outline, lineWidth: 1))
-				}
 			}
 		}
 		.frame(maxWidth: .infinity, alignment: .leading)
@@ -618,30 +592,6 @@ private func actionRow(_ icon: AppIcon, _ title: String, action: @escaping () ->
 		.padding(.top, 6).padding(.bottom, 10)
 	}
 
-	/// A newer release and the button that installs it, or how the install is going.
-	private func updateNotice(_ release: AppUpdater.Release) -> some View {
-		VStack(alignment: .leading, spacing: 6) {
-			switch updater.phase {
-			case .idle:
-				Text("Version \(release.version) is available").font(.footnote.weight(.medium))
-				Button("Update and Restart") { Task { await updater.install() } }
-					.buttonStyle(.pillProminent)
-					.controlSize(.small)
-			case .downloading, .installing:
-				HStack(spacing: 6) {
-					ProgressView().controlSize(.mini)
-					Text(updater.phase == .downloading ? "Downloading \(release.version)…" : "Installing…").font(.footnote)
-				}
-			case .failed(let message):
-				Text(message).font(.footnote).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-				Button("Try Again") { Task { await updater.install() } }
-					.buttonStyle(.pill)
-			}
-		}
-		.frame(maxWidth: .infinity, alignment: .leading)
-		.noticeSurface(radius: 12)
-		.padding(.bottom, 4)
-	}
 }
 
 /// One sidebar line: glyph, name, unread count. Selected rows fill like PiCode's, hovered rows lift faintly.

@@ -1,14 +1,11 @@
 import SwiftUI
 
 @main
-struct MailflareApp: App {
+struct SolstandMailApp: App {
 	@State private var store: MailStore
-	@State private var updater = AppUpdater()
 
 	init() {
 		AppAppearance.applySaved()
-		// Before the store opens the mail database, which may still be in the old sandbox container.
-		ContainerMigration.run()
 		_store = State(initialValue: MailStore())
 	}
 
@@ -17,10 +14,7 @@ struct MailflareApp: App {
 		WindowGroup(id: "main") {
 			RootView()
 				.environment(store)
-				.environment(updater)
 				.task { await store.restore() }
-				.task { await store.license.revalidate() }
-				.task { await updater.checkPeriodically() }
 				.frame(minWidth: 540, minHeight: 560)
 		}
 		// The window draws its own titlebar band; the content runs to the top of the window.
@@ -39,9 +33,6 @@ struct MailflareApp: App {
 				Button("Settings…") { store.settingsPage = store.settingsPage ?? .general }
 					.keyboardShortcut(",")
 					.disabled(store.phase != .ready)
-			}
-			CommandGroup(after: .appInfo) {
-				Button("Check for Updates…") { Task { await updater.check() } }
 			}
 		}
 	}

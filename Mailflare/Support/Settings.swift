@@ -3,7 +3,7 @@ import ServiceManagement
 
 /// The pages of the Settings view, listed in the sidebar in this order.
 enum SettingsPage: String, CaseIterable, Identifiable {
-	case general, accounts, ai, mcp, notifications, license, support, about
+	case general, accounts, ai, mcp, notifications, about
 
 	var id: String { rawValue }
 
@@ -14,8 +14,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 		case .accounts: "Accounts"
 		case .ai: "AI Providers"
 		case .mcp: "MCP Credentials"
-		case .license: "License"
-		case .support: "Support"
 		case .about: "Version"
 		}
 	}
@@ -27,8 +25,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 		case .accounts: .allInboxes
 		case .ai: .sparkles
 		case .mcp: .link
-		case .license: .vip
-		case .support: .support
 		case .about: .info
 		}
 	}
@@ -50,7 +46,7 @@ enum SettingsSection: CaseIterable, Identifiable {
 	var pages: [SettingsPage] {
 		switch self {
 		case .general: [.general, .accounts, .notifications, .ai, .mcp]
-		case .about: [.license, .support, .about]
+		case .about: [.about]
 		}
 	}
 }
@@ -59,7 +55,6 @@ enum SettingsSection: CaseIterable, Identifiable {
 enum ReadingSettings {
 	static let markReadDelayKey = "markReadDelay"
 	static let loadRemoteContentKey = "loadRemoteContent"
-	static let autoCheckUpdatesKey = "autoCheckUpdates"
 	static let showAvatarsKey = "showListAvatars"
 	static let offlineDepthKey = "offlineDepth"
 
@@ -71,7 +66,6 @@ enum ReadingSettings {
 
 	/// Seconds before an opened message is marked read: 0 at once, -1 never.
 	static var markReadDelay: Int { UserDefaults.standard.object(forKey: markReadDelayKey) as? Int ?? 0 }
-	static var autoCheckUpdates: Bool { UserDefaults.standard.object(forKey: autoCheckUpdatesKey) as? Bool ?? true }
 }
 
 enum LaunchAtLogin {

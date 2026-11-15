@@ -4,8 +4,7 @@ import MailflareCore
 
 /// A contact's profile, opened from the reader's header: picture, name and description.
 ///
-/// Mailflare servers have no contact endpoint a device key can use (see `ContactProfiles`), so all three
-/// are kept on this Mac. The picture shown otherwise is the sender's Gravatar, or their initial.
+/// Contact names, notes, and locally selected avatars stay on this Mac. The picture shown otherwise is the sender's Gravatar, or their initial.
 struct ContactEditor: View {
 	@Environment(MailStore.self) private var store
 	@Environment(\.dismiss) private var dismiss

@@ -4,8 +4,8 @@ import SwiftUI
 import MailflareCore
 import Observation
 
-/// Profile pictures for accounts and inboxes: the Mailflare server's own picture when it has one,
-/// Gravatar for other servers. Cached on disk so they show at launch; a 404 keeps the initials.
+/// Profile pictures for accounts and inboxes use Gravatar unless the user picks a local image.
+/// Cached on disk so they show at launch; a missing image keeps the initials.
 @MainActor
 @Observable
 final class AvatarCache {
@@ -74,22 +74,9 @@ final class AvatarCache {
 		requested = requested.filter { !$0.contains(id) }
 	}
 
-	/// `.some(data)` is a picture, `.none` means the server has none, nil means try again later.
+	/// `.some(data)` is a picture, `.none` means Gravatar has none, nil means try again later.
 	private static func fetch(account: Account, mailboxID: String?, email: String) async -> Data??  {
-		var web = URLComponents(string: account.serverUrl.contains("://") ? account.serverUrl : "https://\(account.serverUrl)")
-		guard let host = web?.host, !host.isEmpty, ["http", "https"].contains(web?.scheme ?? "") else {
-			return await gravatar(email)
-		}
-		guard let secret = KeychainCredentialStore().load(accountId: account.id) else { return nil }
-		web?.path = "/api/mobile/avatar"; web?.fragment = nil
-		web?.queryItems = mailboxID.map { [URLQueryItem(name: "mailbox", value: $0)] }
-		guard let url = web?.url else { return nil }
-		var request = URLRequest(url: url)
-		request.setValue("Bearer \(secret)", forHTTPHeaderField: "Authorization")
-		guard let (data, response) = try? await URLSession.shared.data(for: request), let http = response as? HTTPURLResponse else { return nil }
-		// Nothing on the server: the address's Gravatar, then (in the view) a colored initial.
-		if http.statusCode == 404 { return await gravatar(email) }
-		return http.statusCode == 200 ? .some(data) : nil
+		await gravatar(email)
 	}
 
 	// MARK: Senders

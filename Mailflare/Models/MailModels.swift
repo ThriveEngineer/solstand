@@ -36,7 +36,7 @@ extension Mailbox: Identifiable {
 		return bare.split(separator: "@", maxSplits: 1).first.map(String.init) ?? bare
 	}
 
-	/// Mailflare's top-level mailbox per address holds all of its mail; only its children hold messages directly.
+	/// Each account's top-level mailbox per address holds all of its mail; only its children hold messages directly.
 	var isAccount: Bool { parentId == nil && role == nil }
 }
 
@@ -90,10 +90,6 @@ extension OutgoingAttachment: Identifiable {
 	public var id: String { (filePath ?? blobId ?? "") + name }
 }
 
-enum SignInOutcome {
-	case signedIn
-	case needsCode(challenge: String, serverURL: String)
-}
 
 enum Addresses {
 	/// Parses `a@b, Name <c@d>` into addresses; entries without an `@` are dropped.

@@ -1,90 +1,45 @@
-<img src="docs/icon.png" alt="Mailflare" width="128" height="128">
+# Solstand Mail
 
-# Mailflare for macOS
+A native macOS email client built in Swift and SwiftUI. Solstand Mail connects to the accounts you already use and keeps a local cache so reading and organizing mail remains quick and available offline.
 
-A fast Mac mail app for your Mailflare server, Gmail, Outlook, iCloud and more.
+## Product direction
 
-![](docs/demo.png)
-
-This is the Mac app for [Mailflare](https://github.com/hieunc229/mailflare), the self-hosted mail platform that runs on Cloudflare. Your mail is saved on your Mac, so it opens fast and works offline.
+The interface combines Notion Mail's restrained workspace feel, configurable inbox views and keyboard-first navigation with Canary Mail's broad account support, focused inbox workflows, privacy controls and optional AI assistance.
 
 ## Features
 
-- **Made for Mailflare.** Sign in with your password, an app password or a QR code.
-- **Other accounts.** Easy setup for Gmail, Outlook, iCloud, Yahoo, Fastmail and more, or enter your own server.
-- **Many accounts.** Switch accounts from the sidebar. See one inbox per address, or all together.
-- **Works offline.** Read mail without internet. Your actions are sent when you reconnect.
-- **Writing.** Rich text, Cc and Bcc, drafts, reply, forward, undo and redo, and templates. Quick reply from under the message.
-- **Attachments.** Drop or paste files and screenshots. Preview an image and crop it, add text and arrows, or hide private details before you send.
-- **AI Writer.** Tell the AI what to write, and it writes the email for you.
-- **Organize.** Archive, delete, mark as junk, flag, move to folders, and unsubscribe from newsletters.
-- **Search.** Search from the title bar across senders, subjects and the text of every message kept on your Mac, and on the server for older mail. Filter by unread or flagged.
-- **Fast.** The next message is read ahead before you open it, IMAP accounts get new mail the moment it arrives, and Settings → Storage sets how much of each folder stays on your Mac.
-- **Safe reading.** Block remote images, and view the original message.
-- **Notifications.** New-mail alerts and an unread count on the Dock icon.
-- **Mac style.** Light and dark mode and keyboard shortcuts.
-- **Auto updates.** The app updates itself.
-- **AI assistant.** A chat panel that finds mail, drafts replies and tidies your inbox. It can read files you attach and use your MCP servers.
+- **Bring your own account.** Gmail, Outlook, iCloud, Yahoo, Fastmail, and other IMAP/SMTP providers. OAuth sign-in is available for Outlook when configured; other providers may require an app password.
+- **Unified inbox.** View accounts together or individually, with custom inbox views, tabs, folders, unread and flagged filters.
+- **Offline-first.** Mail is cached locally; reading, searching and queued actions continue when a connection is unavailable.
+- **Focused workflows.** Archive, delete, mark as junk, flag, move to folders, unsubscribe, prioritize VIP senders, and snooze mail locally until tomorrow or next week.
+- **Thoughtful writing.** Rich text composition, attachments, replies and forwards, templates, quick replies, undo and redo.
+- **Private reading.** Remote images are blocked by default, message HTML is sanitized, and the original message is available for inspection.
+- **Optional AI.** Connect a provider of your choice for drafting, thread summaries and inbox assistance. AI never sends mail; drafts remain for review in the composer. AI requests may include the email content needed for the requested task.
+- **macOS integration.** Notifications, Dock unread count, light and dark appearances, and keyboard shortcuts.
 
-### Keyboard shortcuts
+## Research notes
 
-| Shortcut | Action |
-| --- | --- |
-| `⌘N` | New message |
-| `⌘,` | Settings |
-| `⌘R` / `⇧⌘R` | Reply / Reply all |
-| `⇧⌘F` | Forward |
-| `⌘⌥F` | Search |
-| `⌘⌫` | Delete |
-| `⌘↩` | Send |
-| `⎋` | Back to inbox (from Settings) |
+The product direction was informed by current public product material from [Notion Mail](https://www.notion.so/product/mail), [Canary Mail](https://canarymail.io/features), and the [Canary Mail macOS preferences guide](https://canarymail.io/help/macos-preferences). The implementation keeps the native mail-client foundation while removing the original service-specific sign-in, license checks, branded upgrade surfaces, and the updater tied to the upstream repository.
 
-## AI features
+## Build
 
-Add an AI provider in **Settings → AI Providers** to turn them on. The AI never sends mail. Drafts open in the composer, and you press Send.
+Requires macOS 15.3 or later and Xcode 16+. This project already references the `MailflareCore` Swift package at `../mailflare-core`. Clone and build that package before opening the project:
 
-- **Providers.** OpenAI, Anthropic, OpenRouter, Groq, Ollama on your Mac, or a similar service. Keys are stored in the macOS Keychain.
-- **Models and prompts.** Choose a model for the assistant and another for AI Writer. Each has its own custom prompt, such as your tone or sign-off.
-- **Assistant.** Open it with the sparkles button in the title bar. Ask it to find emails, summarize a thread or write a reply.
-- **AI Writer.** In the composer, click the sparkles button, type what you want and press Enter. You can undo the result.
-- **Files.** Attach a spreadsheet, CSV or document to the chat. The assistant reads it page by page and can search table rows.
-- **Emails for many people.** Ask for a personal email to each person in a list. A table shows every email to read, edit, untick and accept. You choose whether to send them or keep them as drafts.
-- **MCP servers.** Connect remote MCP servers in **Settings → MCP Credentials**. Tokens are stored in the Keychain. The assistant asks before it runs a tool that may change data, and you can allow trusted tools.
-- **Bigger chat.** Expand the assistant to fill the window. Answers show tables and lists, and the message box styles Markdown as you type.
+```sh
+cd ..
+git clone https://github.com/hieunc229/mailflare-core.git
+cd mailflare-core
+./scripts/build-ios.sh --macos
+cd ../solstand
+open Mailflare.xcodeproj
+```
 
-The AI sends the mail it reads to your chosen provider. Use Ollama to keep everything on your Mac.
-
-## Changelog
-
-Release notes for every version are in [`changelog/`](changelog). Latest: [1.7](changelog/1.7.md).
-
-## Requirements
-
-macOS 15.3 or later.
-
-## Build from source
-
-Install Xcode 16 or later, open `Mailflare.xcodeproj` and run the **Mailflare** scheme. Clone [`mailflare-core`](../mailflare-core) next to this project first.
-
-## Outlook sign-in (OAuth)
-
-Outlook and Microsoft 365 sign in through the system browser (authorization code + PKCE), because Outlook.com no longer accepts passwords over IMAP. Register an app in Microsoft Entra with platform "Mobile and desktop applications", redirect `msauth.xyz.hieunguyen.Mailflare://auth`, supported accounts "personal and organizational", and delegated permissions `IMAP.AccessAsUser.All`, `SMTP.Send` and `offline_access`. Then set the build setting `MAILFLARE_OAUTH_MICROSOFT_CLIENT_ID` to its application (client) id. `MAILFLARE_OAUTH_MICROSOFT_REDIRECT_SCHEME` is optional and defaults to `msauth.<bundle id>`. Debug builds also read both from the environment. Without a client id, Outlook shows the password form. Microsoft 365 tenants may need admin consent and SMTP AUTH enabled for the mailbox.
+If you already cloned the package, run `./scripts/build-ios.sh --macos` from its directory instead. The script builds the generated XCFramework required by `Package.swift`, including a macOS slice. Then run the **Solstand Mail** scheme in Xcode. The app no longer exposes Mailflare account sign-in or workspace licensing. Set `SOLSTAND_MAIL_OAUTH_MICROSOFT_CLIENT_ID` to your own Microsoft Entra application ID (redirect `msauth.com.solstand.mail://auth`) to enable Outlook OAuth. The code and UI are Swift and SwiftUI.
 
 ## Privacy
 
-- Passwords and keys stay in the macOS Keychain.
-- Your mail is saved on your Mac. **Settings → About** shows where.
-- The app only connects to your mail servers, GitHub (for updates) and your AI provider, if you use AI.
-
-## Help
-
-Found a bug or have an idea? [Create an issue on GitHub](https://github.com/hieunc229/mailflare-macos/issues). It is also in **Settings → Support**.
-
-## Related projects
-
-- [`mailflare`](https://github.com/hieunc229/mailflare): the server
-- [`mailflare-core`](../mailflare-core): the shared engine for Mailflare apps
+Account credentials and AI provider keys are stored in the macOS Keychain. Mail is cached on this Mac. Mail content is sent only to the connected mail provider, and to the AI provider when you choose an AI feature.
 
 ## License
 
-[GNU AGPL v3](LICENSE)
+GNU AGPL v3. See [LICENSE](LICENSE).
