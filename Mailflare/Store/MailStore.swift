@@ -1968,7 +1968,7 @@ final class MailStore {
 		if let saved = (try? core?.aiSummary(accountId: acct, messageId: raw)) ?? nil { summaries[id] = saved }
 	}
 
-	/// Summarizes the open message with the AI provider and saves the result with the message.
+	/// Summarizes the open message with the on-device model and saves the result with the message.
 	func summarizeSelected() {
 		guard summarizingID == nil, let detail, let id = selectedID, detail.summary.id == id, let client = ai.client else { return }
 		summarizingID = id

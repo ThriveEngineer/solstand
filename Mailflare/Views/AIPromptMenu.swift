@@ -56,8 +56,8 @@ struct AIPromptMenu: View {
 			if text.isEmpty { store.banner = "Write something in the reply first; AI rewrites what is there." }
 			return
 		}
-		guard let client = store.ai.writerClient(providerID: prompt.providerID, model: prompt.model) else {
-			store.banner = "Add an AI provider in Settings to rewrite replies."
+		guard let client = store.ai.writerClient else {
+			store.banner = store.ai.availabilityDescription
 			return
 		}
 		var draft = ComposeDraft()
@@ -82,7 +82,7 @@ struct AIPromptMenu: View {
 	}
 }
 
-/// The popup that adds a rewrite prompt: its name, the instruction, and the model to run it on.
+/// The popup that adds a rewrite prompt: its name and instruction.
 struct AIPromptEditor: View {
 	@Environment(MailStore.self) private var store
 	@Environment(\.dismiss) private var dismiss
@@ -92,8 +92,6 @@ struct AIPromptEditor: View {
 
 	@State private var name = ""
 	@State private var prompt = ""
-	/// "" follows AI Writer's model; otherwise "providerID|model".
-	@State private var modelChoice = ""
 	@FocusState private var nameFocused: Bool
 
 	private var isValid: Bool {
@@ -115,19 +113,8 @@ struct AIPromptEditor: View {
 						.lineLimit(4...10)
 						.textFieldStyle(.card)
 				}
-				VStack(alignment: .leading, spacing: 6) {
-					label("AI model")
-					Picker("", selection: $modelChoice) {
-						Text("Same as AI Writer").tag("")
-						ForEach(store.ai.readyProviders) { provider in
-							ForEach(provider.choices, id: \.self) { model in
-								Text(store.ai.readyProviders.count > 1 ? "\(provider.name) · \(model)" : model).tag("\(provider.id)|\(model)")
-							}
-						}
-					}
-					.labelsHidden()
-					.pickerStyle(.menu)
-				}
+				Text("Runs privately with the on-device model.")
+					.font(Typography.meta).foregroundStyle(.secondary)
 			}
 		} footer: {
 			HStack(spacing: 8) {
@@ -141,7 +128,6 @@ struct AIPromptEditor: View {
 			guard let editing else { return }
 			name = editing.name
 			prompt = editing.prompt
-			if let provider = editing.providerID, let model = editing.model { modelChoice = "\(provider)|\(model)" }
 		}
 	}
 
@@ -150,12 +136,9 @@ struct AIPromptEditor: View {
 	}
 
 	private func save() {
-		let parts = modelChoice.split(separator: "|", maxSplits: 1).map(String.init)
 		var result = editing ?? AIPrompt(name: "", prompt: "")
 		result.name = name.trimmingCharacters(in: .whitespaces)
 		result.prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-		result.providerID = parts.count == 2 ? parts[0] : nil
-		result.model = parts.count == 2 ? parts[1] : nil
 		if editing == nil { store.aiPrompts.add(result) } else { store.aiPrompts.update(result) }
 		dismiss()
 	}
@@ -170,7 +153,7 @@ private struct AIPromptList: View {
 	var body: some View {
 		DropdownCard(width: 250, anchor: .bottomLeading) {
 			if !store.ai.isConfigured {
-				Text("Add an AI provider in Settings to rewrite replies.")
+				Text(store.ai.availabilityDescription)
 					.font(Typography.notice).foregroundStyle(.secondary)
 					.padding(.horizontal, 10).padding(.vertical, 8)
 					.fixedSize(horizontal: false, vertical: true)

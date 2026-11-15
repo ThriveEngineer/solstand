@@ -249,7 +249,7 @@ final class AIChatModel {
 		var prompt = text
 		var userIndex: Int?
 		// MCP servers pasted into the chat are added for this chat only: the chat shows the secret
-		// hidden, and neither it nor the message around it goes to the AI provider as typed. A button
+		// hidden, and neither it nor the message around it is passed to the on-device model. A button
 		// under the reply saves the server to MCP credentials.
 		let pasted = MCPCredentialParser.parse(text)
 		var candidates = pasted.candidates
@@ -258,7 +258,7 @@ final class AIChatModel {
 		if candidates.isEmpty, MCPCredentialParser.looksLikeSecret(text) {
 			// A secret with no address to go with it: not saved, and not sent anywhere either.
 			messages.append(ChatMessage(role: .user, text: MCPCredentialParser.hidingSecrets(in: text)))
-			messages.append(ChatMessage(role: .assistant, text: "That message has something that looks like a token or key, and I couldn't tell which MCP server it is for, so I did not send it to the AI provider. Add it in Settings → MCP Credentials, or paste it again with the server's address."))
+			messages.append(ChatMessage(role: .assistant, text: "That message has something that looks like a token or key, and I couldn't tell which MCP server it is for, so I kept it out of the conversation. Add it in Settings → MCP Credentials, or paste it again with the server's address."))
 			saveCurrent()
 			return
 		}
@@ -311,8 +311,8 @@ final class AIChatModel {
 		}
 		if !offers.isEmpty {
 			lines.append(store.mcp.alwaysSave
-				? "Saved to MCP credentials (the secret is in your Keychain and was not sent to the AI provider)."
-				: "The secret was not sent to the AI provider and stays on this Mac. Save it to MCP credentials to use it in other chats.")
+				? "Saved to MCP credentials (the secret is in your Keychain and was not passed to the on-device model)."
+				: "The secret was not passed to the on-device model and stays on this Mac. Save it to MCP credentials to use it in other chats.")
 		}
 		var message = ChatMessage(role: .assistant, text: lines.joined(separator: "\n"))
 		if !offers.isEmpty { message.mcpOffers = offers }

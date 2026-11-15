@@ -191,100 +191,6 @@ struct SettingsPicker<Value: Hashable>: View {
 	}
 }
 
-/// A model choice. With one provider the dropdown lists its models; with several it lists the
-/// providers first, and choosing one swaps the list for that provider's models.
-private struct ModelPickerRow: View {
-	var title: String
-	var providers: [AIProviderConfig]
-	var selection: AISettings.ModelChoice?
-	/// When set, a first row that clears the choice (nil), labelled with this.
-	var defaultLabel: String?
-	var onSelect: (AISettings.ModelChoice?) -> Void
-
-	@State private var isOpen = false
-	@State private var isHovering = false
-	@State private var drilled: String?
-	@State private var query = ""
-
-	private var multiple: Bool { providers.count > 1 }
-
-	private var currentLabel: String {
-		guard let selection else { return defaultLabel ?? "" }
-		let name = providers.first { $0.id == selection.providerID }?.name
-		return multiple ? "\(name.map { $0 + " · " } ?? "")\(selection.model)" : selection.model
-	}
-
-	var body: some View {
-		SettingsRow {
-			Text(title).font(Typography.body)
-			Spacer(minLength: 12)
-			Button {
-				withAnimation(.snappy(duration: 0.2)) { isOpen.toggle() }
-			} label: {
-				HStack(spacing: 6) {
-					Text(currentLabel).font(Typography.body).lineLimit(1).truncationMode(.middle)
-						.frame(maxWidth: 300, alignment: .trailing).fixedSize(horizontal: true, vertical: false)
-					HIcon(.chevronDown, size: 12).foregroundStyle(.secondary).rotationEffect(.degrees(isOpen ? 180 : 0))
-				}
-				.padding(.horizontal, 8).padding(.vertical, 4)
-				.background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isHovering || isOpen ? AppTheme.rowHighlight : .clear))
-				.contentShape(Rectangle())
-			}
-			.buttonStyle(.plain)
-			.onHover { isHovering = $0 }
-			.overlay(alignment: .topTrailing) {
-				if isOpen { dropdown.offset(y: 32) }
-			}
-			.clickAway(isActive: isOpen) { close() }
-		}
-		.zIndex(isOpen ? 10 : 0)
-		.preference(key: OpenDropdownKey.self, value: isOpen)
-		.onChange(of: isOpen) { _, _ in drilled = nil; query = "" }
-	}
-
-	private func close() { withAnimation(.snappy(duration: 0.2)) { isOpen = false } }
-
-	private func choose(_ choice: AISettings.ModelChoice?) {
-		onSelect(choice)
-		close()
-	}
-
-	private var dropdown: some View {
-		DropdownCard(width: 240) {
-			if let defaultLabel, drilled == nil {
-				DropdownRow(label: defaultLabel, isSelected: selection == nil) { choose(nil) }
-			}
-			if multiple && drilled == nil {
-				ForEach(providers) { provider in
-					DropdownRow(label: provider.name, isSelected: selection?.providerID == provider.id, trailing: .chevronRight) {
-						withAnimation(.snappy(duration: 0.2)) { query = ""; drilled = provider.id }
-					}
-				}
-			} else if let provider = providers.first(where: { $0.id == drilled }) ?? (multiple ? nil : providers.first) {
-				let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-				let models = q.isEmpty ? provider.choices : provider.choices.filter { $0.lowercased().contains(q) }
-				if multiple {
-					DropdownRow(label: provider.name, icon: .arrowLeft) { withAnimation(.snappy(duration: 0.2)) { drilled = nil } }
-					DropdownDivider()
-				}
-				if provider.choices.count > 8 {
-					DropdownSearchField(text: $query) {
-						if let first = models.first { choose(.init(providerID: provider.id, model: first)) }
-					}
-				}
-				let current = selection?.providerID == provider.id ? selection?.model : nil
-				DropdownScroll(maxHeight: 220, target: q.isEmpty ? current : nil) {
-					if models.isEmpty { DropdownNoResults() }
-					ForEach(models, id: \.self) { model in
-						DropdownRow(label: model, isSelected: model == current) { choose(.init(providerID: provider.id, model: model)) }
-							.id(model)
-					}
-				}
-			}
-		}
-	}
-}
-
 /// A button as wide as the page, outside any group.
 struct WideButton: View {
 	var title: String
@@ -772,71 +678,24 @@ private struct AccountDetail: View {
 
 private struct AISettingsPage: View {
 	@Environment(MailStore.self) private var store
-	/// Model lists fetched on this page, by service address and key. They are kept while the page is
-	/// open and dropped when another settings page is shown.
-	@State private var modelCache: [String: [String]] = [:]
-	/// The provider being added or edited, with the key typed for it.
-	@State private var editing: AIProviderConfig?
-	@State private var editingIsNew = false
-	@State private var keyText = ""
-
 	private var ai: AISettings { store.ai }
 
 	var body: some View {
-		if ai.isConfigured { modelsGroup }
-		if ai.providers.isEmpty {
-			SettingsGroup(title: "AI Providers", footer: "Add a provider to turn on the assistant. The assistant sends the mail it reads to the provider you choose.") {
-				SettingsRow {
-					Text("No providers yet").font(Typography.body).foregroundStyle(.secondary)
-					Spacer()
+		SettingsGroup(title: "On-device AI", footer: "Chat, summaries, reply writing and rewrites use Apple’s on-device language model. Prompts are not sent to a hosted AI model. Connected MCP services still receive the specific tool requests you run.") {
+			SettingsRow {
+				VStack(alignment: .leading, spacing: 4) {
+					Text("Apple Foundation Models").font(Typography.bodySemibold)
+					Text(ai.availabilityDescription).font(Typography.meta).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 				}
-			}
-		} else if !ai.providers.isEmpty {
-			SettingsGroup(title: "AI Providers", footer: "Keys are stored in your Keychain. Switch provider and model from the assistant panel.") {
-				ForEach(Array(ai.providers.enumerated()), id: \.element.id) { index, provider in
-					if index > 0 { SettingsDivider() }
-					SettingsRow {
-						VStack(alignment: .leading, spacing: 1) {
-							HStack(spacing: 6) {
-								Text(provider.name).font(Typography.bodySemibold).lineLimit(1)
-								if provider.id == ai.active?.id { Text("In use").font(Typography.meta).foregroundStyle(.secondary) }
-							}
-							Text(ai.isReady(provider) ? provider.model : "Needs setup")
-								.font(Typography.meta).foregroundStyle(ai.isReady(provider) ? Color.secondary : Color.orange).lineLimit(1)
-						}
-						Spacer(minLength: 8)
-						Button("Edit") { edit(provider, isNew: false) }.buttonStyle(.pill)
-						Button("Remove") { if editing?.id == provider.id { editing = nil }; ai.remove(provider.id) }.buttonStyle(.pill)
-					}
-				}
+				Spacer(minLength: 8)
+				Circle().fill(ai.isConfigured ? Color.green : Color.orange).frame(width: 7, height: 7)
 			}
 		}
-		WideButton(title: "Add Provider", icon: .add) { edit(AIProviderConfig(preset: .openai), isNew: true) }
-			.sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })) {
-				ProviderEditor(config: Binding(get: { editing ?? AIProviderConfig(preset: .openai) }, set: { editing = $0 }),
-							   key: $keyText, isNew: editingIsNew, cache: $modelCache) {
-					if let config = editing { ai.save(config, key: keyText) }
-					editing = nil
-				} cancel: { editing = nil }
-			}
-	}
-
-	private var modelsGroup: some View {
-		let activeChoice = ai.active.map { AISettings.ModelChoice(providerID: $0.id, model: $0.model) }
-		return SettingsGroup(title: "Models", footer: "AI Writer follows the assistant's model unless you pick one for it. Each custom prompt is added to that feature's instructions.") {
-			ModelPickerRow(
-				title: "AI Chat", providers: ai.readyProviders, selection: activeChoice,
-				onSelect: { if let c = $0 { ai.select(providerID: c.providerID, model: c.model) } })
-			SettingsDivider()
-			promptField("Custom prompt for AI Chat, such as “Be concise and sign off with Thanks, Sam”",
-						text: Binding(get: { ai.instructions }, set: { ai.instructions = $0 }))
-			SettingsDivider()
-			ModelPickerRow(
-				title: "AI Writer", providers: ai.readyProviders, selection: ai.writerChoice,
-				defaultLabel: "Same as AI Chat", onSelect: { ai.selectWriter($0) })
-			SettingsDivider()
-			promptField("Custom prompt for AI Writer, such as “Friendly, short paragraphs, no jargon”",
-						text: Binding(get: { ai.writerInstructions }, set: { ai.writerInstructions = $0 }))
+		SettingsGroup(title: "AI Chat", footer: "Set the assistant’s tone and response preferences.") {
+			promptField("For example: Be concise and sign off with Thanks, Sam", text: Binding(get: { ai.instructions }, set: { ai.instructions = $0 }))
+		}
+		SettingsGroup(title: "AI Writer", footer: "These preferences apply to drafted and rewritten replies.") {
+			promptField("For example: Friendly, short paragraphs, no jargon", text: Binding(get: { ai.writerInstructions }, set: { ai.writerInstructions = $0 }))
 		}
 	}
 
@@ -846,156 +705,6 @@ private struct AISettingsPage: View {
 			.lineLimit(2...6)
 			.padding(.vertical, 12)
 			.frame(maxWidth: .infinity, alignment: .leading)
-	}
-
-	private func edit(_ config: AIProviderConfig, isNew: Bool) {
-		keyText = ai.apiKey(for: config.id)
-		editingIsNew = isNew
-		editing = config
-	}
-}
-
-/// The form for one provider: its service, address, key and model.
-private struct ProviderEditor: View {
-	@Environment(MailStore.self) private var store
-	@Binding var config: AIProviderConfig
-	@Binding var key: String
-	var isNew: Bool
-	@Binding var cache: [String: [String]]
-	var save: () -> Void
-	var cancel: () -> Void
-
-	@State private var loading = false
-	@State private var error: String?
-	/// Listing failed, so the model is typed by hand.
-	@State private var typeModel = false
-
-	private var cacheKey: String { "\(config.baseURLString)|\(key.trimmingCharacters(in: .whitespaces))" }
-	private var canList: Bool { config.baseURL != nil && (!config.preset.needsKey || !key.trimmingCharacters(in: .whitespaces).isEmpty) }
-
-	private var canSave: Bool {
-		config.baseURL != nil && !config.model.trimmingCharacters(in: .whitespaces).isEmpty
-			&& (!config.preset.needsKey || !key.trimmingCharacters(in: .whitespaces).isEmpty)
-	}
-
-	var body: some View {
-		ModalScaffold(title: isNew ? "New Provider" : "Edit Provider", width: 460) {
-			VStack(alignment: .leading, spacing: 12) {
-				form
-				if let error {
-					Text(error).font(Typography.meta).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
-				} else if !config.models.isEmpty {
-					Text("\(config.models.count) models available.").font(Typography.meta).foregroundStyle(.secondary)
-				}
-			}
-			// Room for the dropdowns to open downward inside the sheet.
-			.frame(minHeight: 340, alignment: .top)
-		} footer: {
-			HStack(spacing: 8) {
-				Button { Task { await loadModels() } } label: {
-					if loading { ProgressView().controlSize(.small) } else { Text("Load Models") }
-				}
-				.buttonStyle(.pill)
-				.disabled(loading || config.baseURL == nil || (config.preset.needsKey && key.trimmingCharacters(in: .whitespaces).isEmpty))
-				Spacer()
-				Button("Cancel", action: cancel).buttonStyle(.pill).keyboardShortcut(.cancelAction)
-				Button("Save", action: save).buttonStyle(.pillProminent).disabled(!canSave)
-			}
-		}
-	}
-
-	private var form: some View {
-		SettingsGroup(title: "Provider") {
-			SettingsPicker(
-				title: "Service",
-				options: AIProviderPreset.allCases.map { ($0.title, $0) },
-				selection: Binding(get: { config.preset }, set: { changePreset($0) })
-			)
-			SettingsDivider()
-			SettingsRow {
-				Text("Name").font(Typography.body)
-				Spacer(minLength: 12)
-				TextField("Name", text: $config.name)
-					.textFieldStyle(.plain).multilineTextAlignment(.trailing).font(Typography.body)
-			}
-			if config.preset == .custom {
-				SettingsDivider()
-				SettingsRow {
-					Text("Base URL").font(Typography.body)
-					Spacer(minLength: 12)
-					TextField("https://api.example.com/v1", text: $config.customBaseURL)
-						.textFieldStyle(.plain).multilineTextAlignment(.trailing).font(Typography.body)
-				}
-			}
-			if config.preset == .cloudflare {
-				SettingsDivider()
-				SettingsRow {
-					Text("Account ID").font(Typography.body)
-					Spacer(minLength: 12)
-					TextField("Cloudflare account ID", text: Binding(get: { config.cloudflareAccountID ?? "" }, set: { config.cloudflareAccountID = $0 }))
-						.textFieldStyle(.plain).multilineTextAlignment(.trailing).font(Typography.body)
-				}
-			}
-			if config.preset.needsKey {
-				SettingsDivider()
-				SettingsRow {
-					Text("API key").font(Typography.body)
-					Spacer(minLength: 12)
-					SecureField("Paste your key", text: $key)
-						.textFieldStyle(.plain).multilineTextAlignment(.trailing).font(Typography.body)
-				}
-			}
-			SettingsDivider()
-			if typeModel || !canList {
-				SettingsRow {
-					Text("Model").font(Typography.body)
-					Spacer(minLength: 12)
-					TextField(config.preset.defaultModel.isEmpty ? "Model name" : config.preset.defaultModel, text: $config.model)
-						.textFieldStyle(.plain).multilineTextAlignment(.trailing).font(Typography.body)
-				}
-			} else {
-				// Opening it fetches the list the first time; later opens reuse what was fetched.
-				SettingsPicker(
-					title: "Model", options: config.choices.map { ($0, $0) }, selection: $config.model,
-					isLoading: config.models.isEmpty, onOpen: { Task { await loadIfNeeded() } },
-					maxHeight: 180, fallbackLabel: config.model
-				)
-			}
-		}
-	}
-
-	private func changePreset(_ preset: AIProviderPreset) {
-		let previous = config.preset
-		config.preset = preset
-		config.models = []
-		typeModel = false
-		error = nil
-		if config.name == previous.title || config.name.isEmpty { config.name = preset.title }
-		config.model = preset.defaultModel
-	}
-
-	/// Uses the list fetched earlier on this page, or fetches it.
-	private func loadIfNeeded() async {
-		guard config.models.isEmpty, !loading else { return }
-		if let cached = cache[cacheKey] { config.models = cached; return }
-		await loadModels()
-	}
-
-	private func loadModels() async {
-		guard let baseURL = config.baseURL else { return }
-		loading = true; error = nil
-		defer { loading = false }
-		do {
-			let models = try await AIClient.listModels(baseURL: baseURL, apiKey: key.trimmingCharacters(in: .whitespaces))
-			if models.isEmpty { error = "The provider returned no models."; typeModel = true; return }
-			cache[cacheKey] = models
-			typeModel = false
-			config.models = models
-			if !models.contains(config.model) { config.model = models.first(where: { $0 == config.preset.defaultModel }) ?? models[0] }
-		} catch {
-			self.error = error.localizedDescription
-			typeModel = true
-		}
 	}
 }
 

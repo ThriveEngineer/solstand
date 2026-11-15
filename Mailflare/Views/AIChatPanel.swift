@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The assistant, as a card on the window's trailing edge. The sparkles button in the title bar
-/// opens and closes it; it only exists once an AI provider is set up.
+/// opens and closes it; it only exists when Apple's on-device model is available.
 struct AIChatPanel: View {
 	static let width: CGFloat = 360
 	/// The panel's width: its usual one, or the window's when it is expanded.
@@ -14,10 +14,6 @@ struct AIChatPanel: View {
 	@State private var attachments: [ChatAttachment] = []
 	@State private var attachError: String?
 	@State private var dropTargeted = false
-	@State private var modelOpen = false
-	@State private var modelQuery = ""
-	/// The provider whose models the dropdown is showing, when there are several.
-	@State private var modelProvider: String?
 	@State private var focusRequest = 0
 	@State private var inputHeight: CGFloat = 20
 	/// Setting it to true puts the cursor in the message box.
@@ -80,8 +76,7 @@ struct AIChatPanel: View {
 		}
 		.onAppear { if isOpen { focused = true } }
 		.task(id: store.currentAccountID) { chat.loadHistory(accountID: store.currentAccountID) }
-		.onChange(of: isOpen) { _, open in if open { focused = true } else { modelOpen = false } }
-		.onChange(of: modelOpen) { _, _ in modelQuery = ""; modelProvider = nil }
+		.onChange(of: isOpen) { _, open in if open { focused = true } }
 	}
 
 	// MARK: Header
@@ -114,79 +109,14 @@ struct AIChatPanel: View {
 		.frame(height: PaneHeader.height)
 	}
 
-	/// The model in use, and a dropdown of every model of every configured provider.
+	/// AI is always processed by Apple’s on-device model.
 	private var modelMenu: some View {
-		Button { withAnimation(.snappy(duration: 0.2)) { modelOpen.toggle() } } label: {
-			HStack(spacing: 5) {
-				Text(store.ai.active?.model ?? "Model").font(Typography.meta.weight(.medium)).lineLimit(1).truncationMode(.middle)
-				HIcon(.chevronDown, size: 11).rotationEffect(.degrees(modelOpen ? 180 : 0))
-			}
-			.foregroundStyle(modelOpen ? Color.primary : Color.secondary)
-			.padding(.horizontal, 8).padding(.vertical, 5)
-			.frame(maxWidth: 150)
-			.background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(modelOpen ? AppTheme.rowHighlight : .clear))
-			.contentShape(Rectangle())
+		HStack(spacing: 5) {
+			Circle().fill(store.ai.isConfigured ? Color.green : Color.orange).frame(width: 6, height: 6)
+			Text("On-device").font(Typography.meta.weight(.medium)).foregroundStyle(.secondary)
 		}
-		.buttonStyle(.plain)
-		.overlay(alignment: .topTrailing) {
-			if modelOpen { modelDropdown.offset(y: 32) }
-		}
-		.clickAway(isActive: modelOpen) { withAnimation(.snappy(duration: 0.2)) { modelOpen = false } }
-	}
-
-	private func chooseModel(_ provider: AIProviderConfig, _ model: String) {
-		store.ai.select(providerID: provider.id, model: model)
-		withAnimation(.snappy(duration: 0.2)) { modelOpen = false }
-	}
-
-	private var modelDropdown: some View {
-		// Everything the rows need is worked out once here, not per row.
-		let q = modelQuery.trimmingCharacters(in: .whitespaces).lowercased()
-		let activeKey = store.ai.active.map { "\($0.id)|\($0.model)" }
-		let providers = store.ai.readyProviders
-		// Several providers: pick one first, then its models. Searching looks through all of them.
-		let drillProvider = providers.count > 1 ? providers.first { $0.id == modelProvider } : providers.first
-		let showProviders = providers.count > 1 && drillProvider == nil && q.isEmpty
-		let groups = providers
-			.filter { q.isEmpty ? $0.id == drillProvider?.id : true }
-			.map { (provider: $0, models: q.isEmpty ? $0.choices : $0.choices.filter { $0.lowercased().contains(q) }) }
-			.filter { !$0.models.isEmpty }
-		return DropdownCard(width: 260, anchor: .topTrailing) {
-			if !showProviders {
-				if providers.count > 1, q.isEmpty, let drillProvider {
-					DropdownRow(label: drillProvider.name, icon: .arrowLeft) { withAnimation(.snappy(duration: 0.2)) { modelProvider = nil } }
-					DropdownDivider()
-				}
-				DropdownSearchField(text: $modelQuery) {
-					if let first = groups.first, let model = first.models.first { chooseModel(first.provider, model) }
-				}
-			}
-			if showProviders {
-				ForEach(providers) { provider in
-					DropdownRow(label: provider.name, isSelected: provider.id == store.ai.active?.id, trailing: .chevronRight) {
-						withAnimation(.snappy(duration: 0.2)) { modelProvider = provider.id }
-					}
-				}
-			} else {
-				// Lazy, like every long dropdown: only the rows near the viewport are built.
-				DropdownScroll(target: q.isEmpty ? activeKey : nil) {
-					if groups.isEmpty { DropdownNoResults() }
-					ForEach(groups, id: \.provider.id) { group in
-						if !q.isEmpty && providers.count > 1 { DropdownLabel(title: group.provider.name) }
-						ForEach(group.models, id: \.self) { model in
-							let key = "\(group.provider.id)|\(model)"
-							DropdownRow(label: model, isSelected: key == activeKey) { chooseModel(group.provider, model) }
-								.id(key)
-						}
-					}
-				}
-			}
-			DropdownDivider()
-			DropdownRow(label: "Manage Providers…", icon: .settings) {
-				withAnimation(.snappy(duration: 0.2)) { modelOpen = false }
-				store.settingsPage = .ai
-			}
-		}
+		.padding(.horizontal, 8).padding(.vertical, 5)
+		.help(store.ai.availabilityDescription)
 	}
 
 	// MARK: Conversation

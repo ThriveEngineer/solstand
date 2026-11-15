@@ -3,7 +3,7 @@ import Observation
 
 /// A remote MCP server the assistant may use: a name, an address and how to prove who is asking.
 /// The secret is not part of this record: it lives in the Keychain (`MCPStore`), so the saved
-/// list, chat history and anything sent to an AI provider never contain it.
+/// list, chat history and model prompts never contain it.
 struct MCPServer: Identifiable, Codable, Equatable {
 	enum Auth: String, Codable, CaseIterable, Identifiable {
 		case none, bearer, header
@@ -286,7 +286,7 @@ struct MCPCandidate {
 }
 
 /// Finds MCP server details in text the user pasted into the chat, so the secret can be kept in the
-/// Keychain and never reach the AI provider. Understands the `mcpServers` JSON that MCP clients
+/// Keychain and never reach the on-device model. Understands the `mcpServers` JSON that MCP clients
 /// share, a bare `{url, headers}` object, and `Key: value` lines (name, url, token, Authorization,
 /// a header such as X-API-Key). Text without both an address and a secret is left alone.
 enum MCPCredentialParser {
@@ -467,7 +467,7 @@ enum MCPCredentialParser {
 		return (full, String(text[group]))
 	}
 
-	/// Whether the text holds something shaped like a secret, which should not go to an AI provider.
+	/// Whether the text holds something shaped like a secret, which should not go to the model.
 	static func looksLikeSecret(_ text: String) -> Bool {
 		secretShapes.contains { !ranges(of: $0, in: text).isEmpty }
 	}

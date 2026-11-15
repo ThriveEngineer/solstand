@@ -6,9 +6,6 @@ struct AIPrompt: Identifiable, Codable, Equatable {
 	var id = UUID().uuidString
 	var name: String
 	var prompt: String
-	/// The model to run it on; nil follows AI Writer's.
-	var providerID: String?
-	var model: String?
 }
 
 /// The rewrite prompts, kept in UserDefaults. The first launch starts them from `defaults`; after that
