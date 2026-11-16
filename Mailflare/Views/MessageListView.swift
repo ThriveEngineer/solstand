@@ -6,14 +6,7 @@ struct MessageListView: View {
 	@State private var isHoveringFilter = false
 
 	var body: some View {
-		VStack(spacing: 0) {
-			header
-				// Above the list, so the filter button's tooltip is not covered by it.
-				.zIndex(1)
-			Rectangle().fill(AppTheme.cardStroke).frame(height: 1)
-			list
-		}
-		.background(AppTheme.background)
+		list.background(AppTheme.background)
 	}
 
 	/// The mailbox in view and how many messages it holds, on one row, with the unread filter.
@@ -28,7 +21,7 @@ struct MessageListView: View {
 			Button { store.unreadOnly.toggle() } label: {
 				HIcon(.filter, size: 15)
 					.frame(width: 26, height: 26)
-					.foregroundStyle(store.unreadOnly ? Color.accentColor : Color.secondary)
+					.foregroundStyle(store.unreadOnly ? AppTheme.accent : Color.secondary)
 					.background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(store.unreadOnly ? AppTheme.railSelection : .clear))
 					.contentShape(Rectangle())
 			}
@@ -82,6 +75,7 @@ struct MessageListView: View {
 			ScrollView {
 				rows
 			}
+			.modifier(FloatingScrollBar(edge: .top, style: .hard) { header.zIndex(1) })
 			.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { listWidth = $0 }
 			.focusable()
 			.focusEffectDisabled()
@@ -250,6 +244,7 @@ struct MessageListView: View {
 	private func menuCard(for m: MessageSummary, anchor: UnitPoint) -> some View {
 		let role = store.role(of: m)
 		let ids = store.actionIDs(for: m.id)
+		let folderGroups = store.folderMoveGroups(for: ids)
 		let many = ids.count > 1
 		let picked = ids.compactMap { id in store.messages.first { $0.id == id } }
 		func choose(_ action: () -> Void) {
@@ -266,6 +261,12 @@ struct MessageListView: View {
 			DropdownRow(label: allFlagged ? "Remove Flag" : "Flag", icon: allFlagged ? .unflag : .flag, labelFont: font, verticalPadding: 3.5) { choose { store.toggleFlag(ids: ids) } }
 			DropdownRow(label: allRead ? "Mark as Unread" : "Mark as Read", icon: allRead ? .markUnread : .markRead, labelFont: font, verticalPadding: 3.5) { choose { store.toggleRead(ids: ids) } }
 			DropdownDivider()
+			if !folderGroups.isEmpty {
+				FolderMoveMenuRow(groups: folderGroups) { accountID, folder in
+					choose { store.move(ids: ids, to: folder, accountID: accountID) }
+				}
+				.padding(.horizontal, 10).padding(.vertical, 4)
+			}
 			DropdownRow(label: "Archive", icon: .archive, isEnabled: role != "archive", labelFont: font, verticalPadding: 3.5) { choose { store.archive(ids: ids) } }
 			DropdownRow(label: "Move to Junk", icon: .junk, isEnabled: role != "junk", labelFont: font, verticalPadding: 3.5) { choose { store.junk(ids: ids) } }
 			DropdownRow(label: "Delete", icon: .trash, labelFont: font, verticalPadding: 3.5) { choose { store.trash(ids: ids) } }

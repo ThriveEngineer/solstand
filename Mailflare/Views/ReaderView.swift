@@ -65,19 +65,11 @@ private struct MessageDetail: View {
 		// The reply box sticks to the bottom and the message scrolls under it; a draft is edited, not
 		// replied to. The fade lets the text go out behind the box instead of being cut off by it.
 		content
-			.safeAreaInset(edge: .bottom, spacing: 0) {
+			.modifier(FloatingScrollBar(edge: .bottom, style: .soft) {
 				if store.role(of: message) != "drafts" {
 					QuickReplyBox(message: message, attachments: $replyAttachments, error: $dropError)
-						.background {
-							LinearGradient(stops: [
-								.init(color: AppTheme.background.opacity(0), location: 0),
-								.init(color: AppTheme.background, location: 0.45),
-								.init(color: AppTheme.background, location: 1),
-							], startPoint: .top, endPoint: .bottom)
-							.padding(.top, -32)
-						}
 				}
-			}
+			})
 		.background(AppTheme.background)
 		.overlay { if isDropTarget && store.role(of: message) != "drafts" { Rectangle().stroke(Color.accentColor, lineWidth: 2).allowsHitTesting(false) } }
 		.attachmentDrop(enabled: store.role(of: message) != "drafts", isTargeted: $isDropTarget) { urls in

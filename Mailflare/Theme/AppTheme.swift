@@ -1,10 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// A quiet, neutral palette with one soft indigo accent. Colors resolve per appearance through
+/// A quiet, neutral palette with a monochrome accent. Colors resolve per appearance through
 /// `NSColor(name:)`, so views carry no `colorScheme` checks.
 enum AppTheme {
-	static let accent = Color(nsColor: NSColor(rgb: 0x5B61D6))
+	static let accent = adaptive(dark: 0xFFFFFF, light: NSColor(white: 0.08, alpha: 1))
 	/// The base the content sits on: #181818 dark.
 	static let background = adaptive(dark: 0x181818, light: NSColor(white: 1, alpha: 1))
 	/// One step above the base, for cards laid on it.
@@ -60,7 +60,19 @@ extension NSColor {
 }
 
 
-/// The window's backdrop: the system's behind-window blur, tinted by `AppTheme.chrome`.
+/// The window's backdrop. On macOS 26 and later, leave the system material untinted so it can
+/// adapt as Liquid Glass; older systems retain the app's translucent chrome color.
+struct WindowChromeBackdrop: View {
+	var body: some View {
+		if #available(macOS 26.0, *) {
+			WindowVibrancy()
+		} else {
+			ZStack { WindowVibrancy(); AppTheme.chrome }
+		}
+	}
+}
+
+/// The window's behind-window material.
 struct WindowVibrancy: NSViewRepresentable {
 	func makeNSView(context: Context) -> NSVisualEffectView {
 		let view = NSVisualEffectView()

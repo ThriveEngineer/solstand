@@ -53,38 +53,17 @@ struct ComposeView: View {
 
 	var body: some View {
 		VStack(spacing: 0) {
-			HStack {
-				Text(draft.title)
-					.font(Typography.bodySemibold).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-				TitlebarIconButton(icon: .minimize, help: "Minimize (keeps what you wrote)") { if hasChanges { store.minimize(draft) } else { store.compose = nil } }
-			}
-			.padding(.horizontal, 12).padding(.leading, 4).padding(.vertical, 8)
-			rule
-
-			// Headers, then the body and its tools, flat on the window with hairlines between.
-			if store.identities(for: draft).count > 1 {
-				fromRow
-				rule
-			}
-			recipientField("To", text: $draft.to, trailing: AnyView(ccToggles))
-			rule
-			if showCc {
-				field("Cc", text: $draft.cc)
-				rule
-			}
-			if showBcc {
-				field("Bcc", text: $draft.bcc)
-				rule
-			}
+			composeHeader
+			addressBlock
 			field("Subject", text: $draft.subject)
-			rule
-			// Above the editor (a web view), so tooltips and the link popover are not drawn under it.
+				.padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 8)
+			// Formatting controls sit at the top of the writing canvas, not in a separate toolbar strip.
 			formattingBar.zIndex(3)
 			ComposerEditor(initialHTML: draft.body, controller: controller, onChange: { draft.body = $0 }, onFiles: addFiles)
-				.frame(minHeight: 140, maxHeight: .infinity)
+				.frame(minHeight: 180, maxHeight: .infinity)
+				.padding(.horizontal, 20)
 			if !draft.quotedHTML.isEmpty { quoted }
 			if !draft.attachments.isEmpty {
-				rule
 				attachmentChips
 			}
 
@@ -95,13 +74,21 @@ struct ComposeView: View {
 
 			if promptOpen { promptBar.zIndex(4) }
 
-			// Its tooltips and the templates dropdown open upward over everything above.
+			// The primary send actions sit together at the foot of the writing surface.
 			actionBar
-				.padding(.horizontal, 16).padding(.vertical, 12)
+				.padding(.horizontal, 18).padding(.vertical, 14)
 				.zIndex(5)
 		}
 		.frame(width: 680, height: height)
-		.background(AppTheme.background)
+		.background {
+			if #available(macOS 26.0, *) {
+				RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.regularMaterial)
+			} else {
+				RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AppTheme.background)
+			}
+		}
+		.clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+		.overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AppTheme.outline.opacity(0.7), lineWidth: 1))
 		.overlay { if isDropTarget { Rectangle().stroke(Color.accentColor, lineWidth: 2) } }
 		.attachmentDrop(isTargeted: $isDropTarget) { addFiles($0) }
 		.alert("Save as Template", isPresented: $saveTemplateOpen) {
@@ -111,6 +98,46 @@ struct ComposeView: View {
 		} message: {
 			Text("Saves the message body so you can insert it in later messages.")
 		}
+	}
+
+	private var composeHeader: some View {
+		HStack(spacing: 12) {
+			VStack(alignment: .leading, spacing: 2) {
+				Text(draft.title).font(.system(size: 17, weight: .semibold)).lineLimit(1)
+				Text("Compose email").font(Typography.meta).foregroundStyle(.secondary)
+			}
+			Spacer(minLength: 8)
+			TitlebarIconButton(icon: .minimize, help: "Minimize (keeps what you wrote)") {
+				if hasChanges { store.minimize(draft) } else { store.compose = nil }
+			}
+		}
+		.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 14)
+	}
+
+	private var addressBlock: some View {
+		VStack(spacing: 0) {
+			if store.identities(for: draft).count > 1 {
+				fromRow
+				fieldDivider
+			}
+			recipientField("To", text: $draft.to, trailing: AnyView(ccToggles))
+			if showCc {
+				fieldDivider
+				field("Cc", text: $draft.cc)
+			}
+			if showBcc {
+				fieldDivider
+				field("Bcc", text: $draft.bcc)
+			}
+		}
+		.padding(.vertical, 4)
+		.background(AppTheme.elevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+		.overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AppTheme.cardStroke.opacity(0.75), lineWidth: 1))
+		.padding(.horizontal, 16)
+	}
+
+	private var fieldDivider: some View {
+		Rectangle().fill(AppTheme.cardStroke.opacity(0.7)).frame(height: 1).padding(.leading, 72).padding(.trailing, 14)
 	}
 
 	/// Cc and Bcc, at the end of the To row: each shows or hides its own field.
@@ -141,16 +168,18 @@ struct ComposeView: View {
 	}
 
 	private var formattingBar: some View {
-		FormattingToolbar(controller: controller) {
-			// Same state as the reader's colors button: shown where the quoted mail has no dark styles.
-			if quoteNeedsAdapting {
-				TitlebarIconButton(
-					icon: .colors,
-					help: store.adaptColors ? "Show Original Colors" : "Adapt Colors to Dark Mode",
-					isActive: !store.adaptColors
-				) { store.toggleAdaptColors() }
+		LiquidGlassControlContainer(spacing: 8) {
+			FormattingToolbar(controller: controller) {
+				// Same state as the reader's colors button: shown where the quoted mail has no dark styles.
+				if quoteNeedsAdapting {
+					TitlebarIconButton(
+						icon: .colors,
+						help: store.adaptColors ? "Show Original Colors" : "Adapt Colors to Dark Mode",
+						isActive: !store.adaptColors
+					) { store.toggleAdaptColors() }
+				}
+				TitlebarIconButton(icon: .attachment, help: "Attach files (up to 10 MB each)", tooltipTrailing: true) { attach() }
 			}
-			TitlebarIconButton(icon: .attachment, help: "Attach files (up to 10 MB each)", tooltipTrailing: true) { attach() }
 		}
 		.padding(.horizontal, 12).padding(.vertical, 4)
 	}
@@ -203,18 +232,22 @@ struct ComposeView: View {
 	// MARK: Actions
 
 	private var actionBar: some View {
-		HStack(spacing: 8) {
-			Button("Discard") { writeTask?.cancel(); store.compose = nil }.buttonStyle(.pill)
-			TitlebarIconButton(
-				icon: .sparkles,
-				help: aiReady ? "AI Writer" : "Set AI Provider to enable AI Writer",
-				isActive: promptOpen,
-				isDimmed: !aiReady,
-				tooltipAbove: true
-			) { if aiReady { togglePrompt() } }
-			Spacer()
-			Button("Save Draft") { run(send: false) }.buttonStyle(.pill)
-			sendButton
+		LiquidGlassControlContainer(spacing: 10) {
+			HStack(spacing: 8) {
+				Button("Discard") { writeTask?.cancel(); store.compose = nil }
+					.modifier(LiquidGlassActionButton())
+				TitlebarIconButton(
+					icon: .sparkles,
+					help: aiReady ? "AI Writer" : "Set AI Provider to enable AI Writer",
+					isActive: promptOpen,
+					isDimmed: !aiReady,
+					tooltipAbove: true
+				) { if aiReady { togglePrompt() } }
+				Spacer()
+				Button("Save Draft") { run(send: false) }
+					.modifier(LiquidGlassActionButton())
+				sendButton
+			}
 		}
 	}
 
@@ -282,7 +315,7 @@ struct ComposeView: View {
 				.padding(.leading, 14).padding(.trailing, 12).padding(.vertical, 7)
 				.contentShape(Rectangle())
 			}
-			.buttonStyle(.plain)
+			.modifier(LiquidGlassActionButton(prominent: true))
 			.keyboardShortcut(.return, modifiers: .command)
 			.disabled(!canSend)
 			Rectangle().fill(AppTheme.prominentPillText.opacity(0.25)).frame(width: 1, height: 18)
@@ -292,13 +325,11 @@ struct ComposeView: View {
 				HIcon(.chevronDown, size: 12).padding(.horizontal, 9).padding(.vertical, 7).contentShape(Rectangle())
 					.rotationEffect(.degrees(sendMenuOpen ? 180 : 0))
 			}
-			.buttonStyle(.plain)
+			.modifier(LiquidGlassActionButton())
 			.help("Templates")
 		}
 		.font(.system(size: 13, weight: .medium))
-		.foregroundStyle(AppTheme.prominentPillText)
-		.background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(AppTheme.prominentPillFill))
-		.opacity(canSend ? 1 : 0.45)
+		.modifier(ComposeSendSurface(canSend: canSend))
 		// The dropdown opens upward from the chevron.
 		.overlay(alignment: .bottomTrailing) {
 			if sendMenuOpen { sendDropdown.offset(y: -42) }

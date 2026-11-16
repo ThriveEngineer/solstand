@@ -144,10 +144,9 @@ struct SettingsPicker<Value: Hashable>: View {
 						.rotationEffect(.degrees(isOpen ? 180 : 0))
 				}
 				.padding(.horizontal, 8).padding(.vertical, 4)
-				.background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isHovering || isOpen ? AppTheme.rowHighlight : .clear))
 				.contentShape(Rectangle())
 			}
-			.buttonStyle(.plain)
+			.modifier(LiquidGlassMenuButton(isHighlighted: isHovering || isOpen))
 			.onHover { isHovering = $0 }
 			.overlay(alignment: .topTrailing) {
 				if isOpen { dropdown.offset(y: 32) }
@@ -201,13 +200,13 @@ struct WideButton: View {
 	var body: some View {
 		Button(action: action) {
 			HStack(spacing: 6) {
-				if let icon { HIcon(icon, size: 14) }
+				if let icon { HIcon(icon, size: 16) }
 				Text(title)
 			}
 			.frame(maxWidth: .infinity)
 			.padding(.vertical, 7)
 		}
-		.buttonStyle(PillButtonStyle(prominent: prominent))
+		.modifier(LiquidGlassActionButton(prominent: prominent))
 	}
 }
 
@@ -310,7 +309,7 @@ private struct NotificationSettingsPage: View {
 					.font(Typography.meta).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 				Spacer(minLength: 8)
 				Button("Open System Settings") { MailNotifier.openSystemSettings() }
-					.buttonStyle(.pill)
+					.modifier(LiquidGlassActionButton())
 			}
 			SettingsDivider()
 			SettingsToggle(title: "Show previews", detail: "Include the sender and subject. Off, a notification only says there is new mail.", isOn: $previews)
@@ -341,19 +340,11 @@ private struct AccountSettings: View {
 
 	var body: some View {
 		VStack(alignment: .leading, spacing: 22) {
-			HStack(spacing: 2) {
-				ForEach(Tab.allCases) { item in
-					Button { tab = item } label: {
-						Text(item.rawValue).font(Typography.body)
-							.foregroundStyle(tab == item ? Color.primary : Color.secondary)
-							.padding(.horizontal, 12).padding(.vertical, 6)
-							.background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tab == item ? AppTheme.railSelection : .clear))
-							.contentShape(Rectangle())
-					}
-					.buttonStyle(.plain)
-				}
-				Spacer(minLength: 0)
+			Picker("Account settings", selection: $tab) {
+				ForEach(Tab.allCases) { item in Text(item.rawValue).tag(item) }
 			}
+			.pickerStyle(.segmented)
+			.labelsHidden()
 			switch tab {
 			case .organize: OrganizeTab()
 			case .accounts: AccountsTab()
@@ -406,8 +397,8 @@ private struct CustomTabsTab: View {
 				ForEach(Array(store.customTabs.enumerated()), id: \.element.id) { index, tab in
 					if index > 0 { SettingsDivider() }
 					row(tab) {
-						Button("Edit") { store.customTabEditor = tab }.buttonStyle(.pill)
-						Button("Delete") { store.deleteCustomTab(tab.id) }.buttonStyle(.pill).foregroundStyle(.red)
+						Button("Edit") { store.customTabEditor = tab }.modifier(LiquidGlassActionButton())
+						Button("Delete") { store.deleteCustomTab(tab.id) }.modifier(LiquidGlassActionButton()).foregroundStyle(.red)
 					}
 				}
 			}
@@ -469,8 +460,8 @@ private struct InboxViewsTab: View {
 									.font(Typography.meta).foregroundStyle(.secondary)
 							}
 							Spacer(minLength: 8)
-							Button("Edit") { store.inboxViewEditor = view }.buttonStyle(.pill)
-							Button("Delete") { store.deleteInboxView(view.id) }.buttonStyle(.pill).foregroundStyle(.red)
+							Button("Edit") { store.inboxViewEditor = view }.modifier(LiquidGlassActionButton())
+							Button("Delete") { store.deleteInboxView(view.id) }.modifier(LiquidGlassActionButton()).foregroundStyle(.red)
 						}
 					}
 				}
@@ -529,7 +520,7 @@ private struct AccountsTab: View {
 						}
 						.buttonStyle(.plain)
 						Button("Sign Out") { signingOut = account }
-							.buttonStyle(.pill).foregroundStyle(.red)
+							.modifier(LiquidGlassActionButton()).foregroundStyle(.red)
 						Button { withAnimation(.snappy(duration: 0.25)) { openID = account.id } } label: {
 							HIcon(.chevronRight, size: 12).foregroundStyle(.secondary).contentShape(Rectangle())
 						}
@@ -582,9 +573,9 @@ private struct AccountDetail: View {
 				VStack(alignment: .leading, spacing: 8) {
 					Text(account.email).font(Typography.meta).foregroundStyle(.secondary).lineLimit(1)
 					HStack(spacing: 8) {
-						Button("Choose Picture…", action: choosePicture).buttonStyle(.pill)
+						Button("Choose Picture…", action: choosePicture).modifier(LiquidGlassActionButton())
 						if store.avatars.hasLocal(key) {
-							Button("Remove") { store.avatars.removeLocal(key: key); store.loadAvatars(for: account) }.buttonStyle(.pill)
+							Button("Remove") { store.avatars.removeLocal(key: key); store.loadAvatars(for: account) }.modifier(LiquidGlassActionButton())
 						}
 					}
 				}
@@ -623,8 +614,8 @@ private struct AccountDetail: View {
 			HStack(spacing: 8) {
 				if saving { ProgressView().controlSize(.small) }
 				Spacer()
-				Button("Revert") { fill() }.buttonStyle(.pill).disabled(!isDirty || saving)
-				Button("Save", action: save).buttonStyle(.pillProminent).disabled(!isDirty || saving)
+				Button("Revert") { fill() }.modifier(LiquidGlassActionButton()).disabled(!isDirty || saving)
+				Button("Save", action: save).modifier(LiquidGlassActionButton(prominent: true)).disabled(!isDirty || saving)
 			}
 			if let note {
 				Text(note).font(Typography.meta).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)

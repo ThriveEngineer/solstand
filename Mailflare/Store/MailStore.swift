@@ -740,6 +740,16 @@ final class MailStore {
 			.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 	}
 
+	/// Folder destinations for the messages in the current selection, grouped by account.
+	func folderMoveGroups(for ids: [String]) -> [MailFolderMoveGroup] {
+		let accountIDs = Set(ids.map { owner(of: $0).account })
+		return accountList.filter { accountIDs.contains($0.id) }.compactMap { account in
+			let folders = customFolders(of: account.id)
+			guard !folders.isEmpty else { return nil }
+			return MailFolderMoveGroup(accountID: account.id, accountName: accountName(account), folders: folders)
+		}
+	}
+
 	/// The system mailbox with `role` in an account, when it has one.
 	func hasRole(_ role: String, accountID: String, inbox: Mailbox? = nil) -> Bool {
 		mailboxes(of: accountID).contains { $0.role == role && (inbox == nil || $0.parentId == inbox?.id) }
@@ -2037,6 +2047,15 @@ final class MailStore {
 	func move(_ id: String, to box: Mailbox) {
 		let (acct, raw) = owner(of: id)
 		leaving(id) { _ = try core?.moveMessages(accountId: acct, messageIds: [raw], target: .mailbox(id: box.id)) }
+	}
+
+	/// Moves the selected messages belonging to this account into one of its folders.
+	func move(ids: [String], to box: Mailbox, accountID: String) {
+		let matching = ids.filter { owner(of: $0).account == accountID }
+		bulk(matching) { account, raw in
+			guard account == accountID else { return }
+			_ = try core?.moveMessages(accountId: account, messageIds: raw, target: .mailbox(id: box.id))
+		}
 	}
 
 	func archive(_ id: String) { moveToRole(id, "archive") }

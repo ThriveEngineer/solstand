@@ -116,6 +116,7 @@ struct AIChatPanel: View {
 			Text("On-device").font(Typography.meta.weight(.medium)).foregroundStyle(.secondary)
 		}
 		.padding(.horizontal, 8).padding(.vertical, 5)
+		.modifier(LiquidGlassCardSurface(cornerRadius: 10, fallbackFill: AppTheme.composerContextFill, fallbackStroke: AppTheme.composerStroke))
 		.help(store.ai.availabilityDescription)
 	}
 
@@ -304,16 +305,19 @@ struct AIChatPanel: View {
 			}
 		}
 		.padding(.trailing, 12)
-		.background(AppTheme.composerContextFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+		.modifier(LiquidGlassCardSurface(cornerRadius: 14, fallbackFill: AppTheme.composerContextFill, fallbackStroke: AppTheme.composerStroke))
 		.padding(.horizontal, 12).padding(.bottom, 12).padding(.top, 28)
 		.frame(maxWidth: Self.readableWidth)
 		.frame(maxWidth: .infinity)
-		.background(
-			LinearGradient(stops: [.init(color: AppTheme.background.opacity(0), location: 0),
+		.background {
+			if #available(macOS 26.0, *) { Color.clear }
+			else {
+				LinearGradient(stops: [.init(color: AppTheme.background.opacity(0), location: 0),
 								   .init(color: AppTheme.background.opacity(0.85), location: 0.55),
 								   .init(color: AppTheme.background, location: 1)],
-						   startPoint: .top, endPoint: .bottom)
-		)
+						  startPoint: .top, endPoint: .bottom)
+			}
+		}
 	}
 
 	private func chooseFiles() {

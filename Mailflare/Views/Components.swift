@@ -1,4 +1,5 @@
 import SwiftUI
+import MailflareCore
 
 // MARK: Window metrics
 
@@ -19,8 +20,8 @@ enum WindowChromeMetrics {
 }
 
 enum RailMetrics {
-	/// The glyph size shared by the titlebar's buttons.
-	static let iconSize: CGFloat = 17
+	/// A consistent 16pt symbol size for the macOS navigation and toolbar layer.
+	static let iconSize: CGFloat = 16
 }
 
 // MARK: Buttons
@@ -37,7 +38,7 @@ struct PillButtonStyle: ButtonStyle {
 			.padding(.horizontal, 14)
 			.padding(.vertical, 7)
 			.background(
-				RoundedRectangle(cornerRadius: 10, style: .continuous)
+				RoundedRectangle(cornerRadius: 8, style: .continuous)
 					.fill(prominent ? AppTheme.prominentPillFill : AppTheme.railSelection.opacity(0.7))
 			)
 			.opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.7 : 1)
@@ -261,9 +262,227 @@ struct LoaderBar: View {
 
 // MARK: Titlebar controls
 
+/// Uses the system Liquid Glass surface for the navigation layer on current macOS, while keeping
+/// the prior hover treatment for installations that predate the glass APIs.
+struct TitlebarGlassSurface: ViewModifier {
+	var isHighlighted = false
+	var cornerRadius: CGFloat = 8
+
+	func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+			content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+		} else {
+			content.background(
+				RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+					.fill(isHighlighted ? AppTheme.railSelection.opacity(0.6) : .clear)
+			)
+		}
+	}
+}
+
+/// Groups nearby glass controls so the system can render and morph their surfaces as one.
+struct LiquidGlassControlContainer<Content: View>: View {
+	let content: Content
+	var spacing: CGFloat = 10
+
+	init(spacing: CGFloat = 10, @ViewBuilder content: () -> Content) {
+		self.spacing = spacing
+		self.content = content()
+	}
+
+	var body: some View {
+		if #available(macOS 26.0, *) {
+			GlassEffectContainer(spacing: spacing) { content }
+		} else {
+			content
+		}
+	}
+}
+
+/// A glass card on current macOS, with the existing opaque card treatment as a fallback.
+struct LiquidGlassCardSurface: ViewModifier {
+	var cornerRadius: CGFloat = 12
+	var fallbackFill: Color = AppTheme.elevated
+	var fallbackStroke: Color = AppTheme.cardStroke
+	var shadowRadius: CGFloat = 0
+	var shadowY: CGFloat = 0
+
+	func body(content: Content) -> some View {
+		let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+		if #available(macOS 26.0, *) {
+			content.glassEffect(.regular, in: shape)
+		} else {
+			content
+				.background(fallbackFill, in: shape)
+				.overlay(shape.stroke(fallbackStroke, lineWidth: 1))
+				.shadow(color: AppTheme.composerShadow, radius: shadowRadius, y: shadowY)
+		}
+	}
+}
+
+struct ScrollEdgeEffect: ViewModifier {
+	enum Style { case hard, soft }
+	let edges: Edge.Set
+	let style: Style
+
+	@ViewBuilder func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+		switch style {
+		case .hard: content.scrollEdgeEffectStyle(.hard, for: edges)
+		case .soft: content.scrollEdgeEffectStyle(.soft, for: edges)
+		}
+		} else {
+			content
+		}
+	}
+}
+
+/// Pins controls as a system scroll bar so SwiftUI can draw its edge effect over scrolling content.
+struct FloatingScrollBar<Bar: View>: ViewModifier {
+	let edge: VerticalEdge
+	let style: ScrollEdgeEffect.Style
+	let bar: Bar
+
+	init(edge: VerticalEdge, style: ScrollEdgeEffect.Style, @ViewBuilder bar: () -> Bar) {
+		self.edge = edge
+		self.style = style
+		self.bar = bar()
+	}
+
+	@ViewBuilder func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+			content
+				.safeAreaBar(edge: edge, spacing: 0) { bar }
+				.modifier(ScrollEdgeEffect(edges: edge == .top ? .top : .bottom, style: style))
+		} else {
+			content.safeAreaInset(edge: edge, spacing: 0) { bar }
+		}
+	}
+}
+
+struct MailFolderMoveGroup: Identifiable {
+	let accountID: String
+	let accountName: String
+	let folders: [Mailbox]
+	var id: String { accountID }
+}
+
+/// A folder picker row for custom message menus; the popup itself uses the native macOS menu surface.
+struct FolderMoveMenuRow: View {
+	let groups: [MailFolderMoveGroup]
+	var label = "Move to Folder"
+	let action: (String, Mailbox) -> Void
+
+	var body: some View {
+		Menu {
+			ForEach(groups) { group in
+				if groups.count > 1 {
+					Menu(group.accountName) {
+						folderButtons(in: group)
+					}
+				} else {
+					folderButtons(in: group)
+				}
+			}
+		} label: {
+			HStack(spacing: 8) {
+				HIcon(.folder, size: RailMetrics.iconSize)
+				Text(label).font(Typography.body)
+				Spacer(minLength: 8)
+				HIcon(.chevronRight, size: 11).foregroundStyle(.tertiary)
+			}
+			.frame(maxWidth: .infinity, alignment: .leading)
+			.contentShape(Rectangle())
+		}
+		.menuStyle(.button)
+		.buttonStyle(.plain)
+		.disabled(groups.isEmpty)
+	}
+
+	@ViewBuilder private func folderButtons(in group: MailFolderMoveGroup) -> some View {
+		ForEach(group.folders, id: \.id) { folder in
+			Button(folder.name, systemImage: "folder") { action(group.accountID, folder) }
+		}
+	}
+}
+
+/// System glass button styles on current macOS; the app's established pill buttons on older releases.
+struct LiquidGlassActionButton: ViewModifier {
+	var prominent = false
+
+	@ViewBuilder func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+			if prominent { content.buttonStyle(.glassProminent).controlSize(.regular) }
+			else { content.buttonStyle(.glass).controlSize(.regular) }
+		} else {
+			content.buttonStyle(prominent ? .pillProminent : .pill)
+		}
+	}
+}
+
+/// A compact menu trigger for controls embedded in Settings forms.
+struct LiquidGlassMenuButton: ViewModifier {
+	var isHighlighted = false
+	var cornerRadius: CGFloat = 8
+
+	@ViewBuilder func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+			content.buttonStyle(.glass).controlSize(.regular)
+		} else {
+			content
+				.buttonStyle(.plain)
+				.background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(isHighlighted ? AppTheme.rowHighlight : .clear))
+		}
+	}
+}
+
+/// The selected row in sidebar navigation is part of the Liquid Glass navigation layer.
+struct NavigationRowSurface: ViewModifier {
+	var isSelected: Bool
+	var isHovering: Bool
+	var cornerRadius: CGFloat = 8
+
+	func body(content: Content) -> some View {
+		let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+		if #available(macOS 26.0, *), isSelected {
+			content.glassEffect(.regular, in: shape)
+		} else {
+			content.background(shape.fill(isSelected ? AppTheme.railSelection : (isHovering ? AppTheme.rowHighlight : .clear)))
+		}
+	}
+}
+
+/// Keeps the split send control native-glass on current macOS and the original single pill elsewhere.
+struct ComposeSendSurface: ViewModifier {
+	var canSend: Bool
+
+	@ViewBuilder func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+			content.opacity(canSend ? 1 : 0.45)
+		} else {
+			content
+				.foregroundStyle(AppTheme.prominentPillText)
+				.background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(AppTheme.prominentPillFill))
+				.opacity(canSend ? 1 : 0.45)
+		}
+	}
+}
+
+/// The narrow, temporary navigation drawer floats above the mail content on the glass layer.
+struct FloatingSidebarSurface: ViewModifier {
+	func body(content: Content) -> some View {
+		if #available(macOS 26.0, *) {
+			content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+		} else {
+			content.background { ZStack { Rectangle().fill(.regularMaterial); AppTheme.chrome } }
+		}
+	}
+}
+
 /// A titlebar glyph button: the rail's glyph size in a 26pt square that lifts on hover.
 struct TitlebarIconButton: View {
-	static let size: CGFloat = 26
+	/// Apple’s default macOS control target is 28 points; icons stay visually lighter at 16 points.
+	static let size: CGFloat = 28
 
 	var icon: AppIcon
 	var help: String
@@ -288,7 +507,7 @@ struct TitlebarIconButton: View {
 				if isLoading { ProgressView().controlSize(.small).scaleEffect(0.7) } else { HIcon(icon, size: iconSize) }
 			}
 				.frame(width: Self.size, height: Self.size)
-				.background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isHovering ? AppTheme.railSelection.opacity(0.6) : .clear))
+				.modifier(TitlebarGlassSurface(isHighlighted: isHovering || isActive))
 				.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
@@ -315,7 +534,7 @@ struct TitlebarMenu<Content: View>: View {
 	var body: some View {
 		let label = HIcon(icon, size: RailMetrics.iconSize)
 			.frame(width: TitlebarIconButton.size, height: TitlebarIconButton.size)
-			.background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isHovering ? AppTheme.railSelection.opacity(0.6) : .clear))
+			.modifier(TitlebarGlassSurface(isHighlighted: isHovering))
 			.contentShape(Rectangle())
 		Group {
 			if let primaryAction {
@@ -474,9 +693,7 @@ struct DropdownCard<Content: View>: View {
 		VStack(alignment: .leading, spacing: spacing) { content }
 			.padding(4)
 			.frame(minWidth: width, maxWidth: width ?? .infinity)
-			.background(AppTheme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-			.overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.cardStroke, lineWidth: 1))
-			.shadow(color: AppTheme.composerShadow, radius: 14, y: 6)
+			.modifier(LiquidGlassCardSurface(shadowRadius: 14, shadowY: 6))
 			.transition(.opacity.combined(with: .scale(scale: 0.98, anchor: anchor)))
 	}
 }
@@ -505,11 +722,11 @@ struct DropdownRow: View {
 		ZStack(alignment: .trailing) {
 			Button(action: action) {
 				HStack(spacing: 8) {
-					if let icon { HIcon(icon, size: 14).foregroundStyle(.secondary).rotationEffect(.degrees(iconRotation)) }
+					if let icon { HIcon(icon, size: 16).foregroundStyle(.secondary).rotationEffect(.degrees(iconRotation)) }
 					Text(label).font(labelFont ?? Typography.body).lineLimit(1)
 					Spacer(minLength: 8)
 					if let detail { Text(detail).font(Typography.meta).foregroundStyle(.secondary).lineLimit(1) }
-					if isSelected { HIcon(.check, size: 14) }
+					if isSelected { HIcon(.check, size: 16) }
 					if let trailing { HIcon(trailing, size: 12).foregroundStyle(.secondary) }
 				}
 				.padding(.horizontal, 10).padding(.vertical, verticalPadding)

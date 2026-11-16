@@ -62,8 +62,8 @@ struct QuickReplyBox: View {
 		}
 		// A little more below than above, so the line sits centred in the card.
 		.padding(.leading, 14).padding(.trailing, 8).padding(.top, 8).padding(.bottom, 10)
-		.background(AppTheme.composerFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-		.overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isActive ? AppTheme.outline : AppTheme.composerStroke, lineWidth: 1))
+		.modifier(LiquidGlassCardSurface(cornerRadius: 12, fallbackFill: AppTheme.composerFill,
+										 fallbackStroke: isActive ? AppTheme.outline : AppTheme.composerStroke))
 		.overlay(alignment: .bottomTrailing) { sendButton.padding(.trailing, 6).padding(.bottom, (Self.inactiveHeight - Self.sendSize) / 2) }
 		.contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 		.onTapGesture { if isActive { controller.focus() } else { activate() } }

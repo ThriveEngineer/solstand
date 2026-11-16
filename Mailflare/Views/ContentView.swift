@@ -126,12 +126,18 @@ struct ContentView: View {
 		}
 		.padding(.top, WindowChromeMetrics.titlebarHeight)
 		.frame(maxWidth: .infinity, maxHeight: .infinity)
-		.background { ZStack { WindowVibrancy(); AppTheme.chrome } }
+		.background { WindowChromeBackdrop() }
 		.overlay(alignment: .topLeading) { sidebarDrawer }
 		.overlay(alignment: .topTrailing) { floatingChat }
 		.overlay(alignment: .topLeading) { titlebarLeading }
-		.overlay(alignment: .topLeading) { if store.settingsPage == nil && !store.chatFillsWindow && (narrowChat || !(layout.single && store.selectedID != nil)) { titlebarSearch } }
-		.overlay(alignment: .topTrailing) { if store.settingsPage == nil && !store.chatFillsWindow { titlebarTrailing } }
+		.overlay(alignment: .topLeading) {
+			if store.settingsPage == nil && !store.chatFillsWindow && (narrowChat || !(layout.single && store.selectedID != nil)) {
+				titlebarSearch
+			}
+		}
+		.overlay(alignment: .topTrailing) {
+			if store.settingsPage == nil && !store.chatFillsWindow { titlebarTrailing }
+		}
 		.overlay(alignment: .topTrailing) { if store.ai.isConfigured { assistantToggle } }
 		.animation(.easeInOut(duration: 0.2), value: store.chatOpen)
 		.animation(.easeInOut(duration: 0.28), value: store.chatExpanded)
@@ -283,7 +289,7 @@ struct ContentView: View {
 				SidebarView()
 					.frame(width: min(CGFloat(sidebarWidth), max(200, windowWidth - 60)))
 					.frame(maxHeight: .infinity)
-					.background { ZStack { Rectangle().fill(.regularMaterial); AppTheme.chrome } }
+					.modifier(FloatingSidebarSurface())
 					.overlay(alignment: .trailing) { Rectangle().fill(AppTheme.cardStroke).frame(width: 1) }
 					.shadow(color: AppTheme.composerShadow, radius: 18, x: 4)
 					.padding(.top, WindowChromeMetrics.titlebarHeight)
@@ -397,7 +403,7 @@ struct ContentView: View {
 		}
 		.padding(.horizontal, 10)
 		.frame(width: width, height: 28)
-		.background(AppTheme.composerContextFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+		.modifier(TitlebarGlassSurface(isHighlighted: searchFocused || !store.searchText.isEmpty, cornerRadius: 8))
 		.contentShape(Rectangle())
 		.onTapGesture { searchFocused = true }
 		// ⌥⌘F focuses the field.
@@ -588,6 +594,7 @@ struct ContentView: View {
 	/// its right edge on the button's.
 	private func moreMenu(_ message: MessageSummary, role: String?, hidden: [HeaderAction]) -> some View {
 		let unsubscribe = store.detail.flatMap { $0.summary.id == message.id ? UnsubscribeLink.find(in: $0.html) : nil }
+		let folderGroups = store.folderMoveGroups(for: [message.id])
 		func choose(_ action: () -> Void) {
 			withAnimation(.snappy(duration: 0.2)) { moreOpen = false }
 			action()
@@ -624,6 +631,12 @@ struct ContentView: View {
 					DropdownRow(label: "Show Original", icon: .sourceCode) { choose { store.original = message } }
 					DropdownDivider()
 					DropdownLabel(title: "Move to")
+					if !folderGroups.isEmpty {
+						FolderMoveMenuRow(groups: folderGroups) { accountID, folder in
+							choose { store.move(ids: [message.id], to: folder, accountID: accountID) }
+						}
+						.padding(.horizontal, 10).padding(.vertical, 4)
+					}
 					DropdownRow(label: "Archive", icon: .archive, isEnabled: role != "archive") { choose { store.archive(message.id) } }
 					DropdownRow(label: "Spam", icon: .junk, isEnabled: role != "junk") { choose { store.junk(message.id) } }
 					DropdownRow(label: "Trash", icon: .trash, isEnabled: role != "trash") { choose { store.trash(message.id) } }

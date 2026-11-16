@@ -125,8 +125,7 @@ struct SidebarView: View {
 	/// dropdown grows this same card downward.
 	private var header: some View {
 		headerButton
-			.background(AppTheme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-			.overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.outline, lineWidth: 1))
+			.modifier(LiquidGlassCardSurface(cornerRadius: 12, fallbackStroke: AppTheme.outline))
 			.padding(.horizontal, Self.gutter)
 	}
 
@@ -137,9 +136,7 @@ struct SidebarView: View {
 			Rectangle().fill(AppTheme.cardStroke).frame(height: 1).padding(.horizontal, 10)
 			switcher
 		}
-		.background(AppTheme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-		.overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(AppTheme.outline, lineWidth: 1))
-		.shadow(color: AppTheme.composerShadow, radius: 14, y: 6)
+		.modifier(LiquidGlassCardSurface(cornerRadius: 12, fallbackStroke: AppTheme.outline, shadowRadius: 14, shadowY: 6))
 		.padding(.horizontal, Self.gutter)
 	}
 
@@ -615,10 +612,7 @@ private struct SidebarRow: View {
 			}
 			.padding(.horizontal, 10)
 			.padding(.vertical, 7)
-			.background(
-				RoundedRectangle(cornerRadius: 8, style: .continuous)
-					.fill(isSelected ? AppTheme.railSelection : (isHovering ? AppTheme.rowHighlight : .clear))
-			)
+			.modifier(NavigationRowSurface(isSelected: isSelected, isHovering: isHovering))
 			.contentShape(Rectangle())
 		}
 		.buttonStyle(.plain)
